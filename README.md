@@ -90,3 +90,13 @@ the mandi will decide which data it needs from the kobo
 ### 9. How will each KoBo submission reliably carry the Mandi establishment ID?
 
 the kobo will pull or preload the list of each establishment based on form, like one form question, user will search and select.
+
+
+## Local review build
+
+The first implementation milestone is ready for local review: Django/PostgreSQL backend with business logic in services, and a React frontend adapted from the AFDA CMS setup. It includes establishment records and manual source links, inspection summaries and approval, inspection coverage, employee creation, a core geography app, and checklist XLSForm uploads. Live integrations and actual checklist conversion follow review.
+
+- [Run and review the system](docs/development.md)
+- [Implementation plan](docs/implementation-plan.md)
+- [Requirement review and drift corrections](docs/implementation-review.md)
+- [Checklist findings](docs/checklist-review-findings.txt)

@@ -1,0 +1,118 @@
+.calendar:global(.rmdp-wrapper),
+.calendar :global(.rmdp-month-picker),
+.calendar :global(.rmdp-year-picker) {
+  border-color: var(--border);
+  background-color: var(--popover);
+  color: var(--popover-foreground);
+}
+
+.calendar:global(.rmdp-wrapper) {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: inherit;
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.16),
+    0 4px 6px -4px rgb(0 0 0 / 0.16);
+}
+
+.calendar :global(.rmdp-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.5rem;
+}
+
+.calendar :global(.rmdp-header-values) {
+  flex: 1;
+  margin: 0;
+  text-align: center;
+}
+
+.calendar :global(.rmdp-header > div) {
+  width: 100%;
+  gap: 0.25rem;
+}
+
+.navigationButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  cursor: pointer;
+}
+
+.navigationButton:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.navigationButton:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.navigationButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.calendar:global(.ep-arrow)::after {
+  border-color: var(--border);
+  background-color: var(--popover);
+}
+
+.calendar :global(.rmdp-header-values),
+.calendar :global(.rmdp-day:not(.rmdp-deactive)),
+.calendar :global(.rmdp-month-picker .rmdp-day),
+.calendar :global(.rmdp-year-picker .rmdp-day) {
+  color: var(--popover-foreground);
+}
+
+.calendar :global(.rmdp-week-day) {
+  color: var(--muted-foreground);
+}
+
+.calendar :global(.rmdp-day.rmdp-deactive),
+.calendar :global(.rmdp-day.rmdp-disabled) {
+  color: var(--muted-foreground);
+  opacity: 0.55;
+}
+
+.calendar :global(.rmdp-arrow) {
+  border-color: var(--primary);
+}
+
+.calendar :global(.rmdp-arrow-container:hover) {
+  background-color: var(--accent);
+}
+
+.calendar :global(.rmdp-day.rmdp-today span) {
+  border: 1px solid var(--primary);
+  background-color: transparent;
+  color: var(--primary);
+}
+
+.calendar :global(.rmdp-day.rmdp-selected span:not(.highlight)),
+.calendar :global(.rmdp-day.rmdp-range span) {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: none;
+}
+
+.calendar :global(.rmdp-day:not(.rmdp-day-hidden):not(.rmdp-disabled) span:hover) {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.calendar :global(.rmdp-day.rmdp-selected:not(.rmdp-disabled) span:hover) {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
