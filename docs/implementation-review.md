@@ -62,7 +62,7 @@ These items were outside the review milestone and remain unchanged:
 
 ## Verification
 
-- Backend: `manage.py check`, migration consistency, and 27 tests pass.
+- Backend: `manage.py check`, migration consistency, and 29 tests pass.
 - Frontend: production build and three permission/calendar tests pass.
 - Browser: dashboard, establishment registry, establishment detail, source
   linking dialog, inspection filters, coverage, and Pashto RTL were checked

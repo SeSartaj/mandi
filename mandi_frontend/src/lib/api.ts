@@ -94,9 +94,42 @@ export type Checklist = {
   establishment_kind: string;
   xlsform: string | null;
   kobo_asset_uid: string;
+  kobo_project_url?: string | null;
   kobo_deployment_status: "not_deployed" | "deploying" | "deployed" | "failed";
   kobo_deployment_error: string;
   kobo_deployed_at: string | null;
   created_at: string;
   updated_at: string;
+};
+export type KoboScoreSection = {
+  key: string;
+  label: string;
+  score: number;
+  max: number | null;
+  percent: number | null;
+};
+export type KoboSubmissionScores = {
+  sections: KoboScoreSection[];
+  score: number | null;
+  max: number | null;
+  percent: number | null;
+};
+export type KoboAnswer = {
+  name: string;
+  label: string;
+  value: unknown;
+  display: string;
+};
+export type KoboSubmission = {
+  id: number;
+  asset_uid: string;
+  submission_id: string;
+  establishment_id: string;
+  checklist_name: string | null;
+  checklist_version: string | null;
+  submitted_at: string | null;
+  scores: KoboSubmissionScores;
+  answers: KoboAnswer[];
+  kobo_url: string | null;
+  data: Record<string, unknown>;
 };

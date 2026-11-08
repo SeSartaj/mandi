@@ -82,12 +82,46 @@ redeploys the asset through `/api/v2/assets/{uid}/deployment/`.
 - `POST /api/v1/checklists/{id}/deploy/` requires
   `inspections.deploy_checklist`.
 - Mandi administrators and integration operators receive that permission.
+- Deployment prepares the XLSForm automatically:
+  - Adds a first `select_one_from_file establishments.csv` question named
+    `establishment_id` with search appearance when it is missing.
+  - Converts `.xls` to `.xlsx` with LibreOffice when necessary.
+  - Generates `establishments.csv` from Mandi establishments, ordered by most
+    recently updated, and attaches it as KoBo form media.
+  - Re-imports the form after attaching the CSV so KoBo preserves the external
+    choice list.
 - The checklist stores the KoBo asset UID, deployment status, error message,
   deployer, and deployment time.
 - A failed KoBo import or deployment returns the KoBo error in the checklist row
   and shows a failure message in the UI.
 - Upload or replace the XLSForm before deploying. Re-deploying updates the
   existing KoBo asset when it still exists.
+
+## KoBo submissions per establishment
+
+- `GET /api/v1/integrations/kobo/establishments.csv` downloads the same
+  establishment CSV for form builders and diagnostics.
+- `POST /api/v1/integrations/kobo/sync/` pulls submissions from deployed KoBo
+  assets. Use `{"establishment_id": "..."}` to limit the sync to one
+  establishment.
+- Submissions are stored in `KoboSubmission` and matched through the form's
+  `establishment_id` answer.
+- `GET /api/v1/establishments/{id}/kobo-submissions/` returns stored submissions.
+- Each sync also copies the deployed form's question and choice labels into
+  `KoboSubmission.form_schema`, so Mandi can show readable answers without
+  calling KoBo again.
+- The serializer derives `scores` from the form's calculated fields
+  (`score_<key>`, `max_<key>`, `pct_<key>`, `result_pct`), `answers` from the
+  answered questions (choice values translated through the stored schema), and
+  `kobo_url` pointing at the KoBo data table of the deployed form.
+- KoBo stores answers inside their group or repeat (`sec2/q2_1`,
+  `samples[1]/name`), so keys are normalised to the bare question name before
+  labels, choices, and scores are resolved.
+- Section order uses `order_<key>`, then the leading number in `title_<key>`,
+  then a canonical hint list, because KoBo returns JSON keys unordered.
+- The establishment detail page has a **KoBo inspections** panel with a
+  **Sync from KoBo** button, the final score per submission, section score bars,
+  the answered questions, an **Open in KoBo** link, and the raw submission JSON.
 
 Restart the backend after changing KoBo environment variables.
 

@@ -1,8 +1,13 @@
+from io import BytesIO
 from pathlib import Path
+import json
 import time
+from urllib.parse import urlparse
 
 import requests
 from django.conf import settings
+
+from .xlsform import XlsFormError, add_establishment_question
 
 
 class KoboError(Exception):
@@ -128,7 +133,46 @@ def deploy_asset(asset):
     return get_asset(asset_uid)
 
 
-def deploy_checklist_to_kobo(checklist):
+def replace_form_media(asset_uid, filename, content, description):
+    """Replace a form media file (e.g. establishments.csv) on an asset."""
+    files = _request("GET", f"/api/v2/assets/{asset_uid}/files/").json()
+    for item in files.get("results", []):
+        if (
+            item.get("file_type") == "form_media"
+            and item.get("description") == description
+        ):
+            _request(
+                "DELETE",
+                f"/api/v2/assets/{asset_uid}/files/{item['uid']}/",
+            )
+    _request(
+        "POST",
+        f"/api/v2/assets/{asset_uid}/files/",
+        data={
+            "file_type": "form_media",
+            "description": description,
+            "metadata": json.dumps({"filename": filename}),
+        },
+        files={"content": (filename, content, "text/csv")},
+    )
+
+
+def fetch_submissions(asset_uid):
+    """Return all JSON submissions for an asset, following KoBo pagination."""
+    submissions = []
+    path = f"/api/v2/assets/{asset_uid}/data/?format=json&limit=1000"
+    while path:
+        payload = _request("GET", path).json()
+        submissions.extend(payload.get("results", []))
+        next_url = payload.get("next")
+        if not next_url:
+            break
+        parsed = urlparse(next_url)
+        path = parsed.path + (f"?{parsed.query}" if parsed.query else "")
+    return submissions
+
+
+def deploy_checklist_to_kobo(checklist, establishments_csv=None):
     """Import the checklist XLSForm and deploy it as a KoBo survey."""
     if not checklist.xlsform:
         raise KoboError("Upload an XLSForm before deploying.")
@@ -136,17 +180,51 @@ def deploy_checklist_to_kobo(checklist):
     existing_asset = (
         get_asset(checklist.kobo_asset_uid) if checklist.kobo_asset_uid else None
     )
-    destination = (
-        _public_asset_url(checklist.kobo_asset_uid) if existing_asset else None
-    )
     filename = Path(checklist.xlsform.name).name
 
     with checklist.xlsform.open("rb") as file_handle:
+        try:
+            xlsform_content, xlsform_name = add_establishment_question(
+                filename, file_handle.read()
+            )
+        except XlsFormError as exc:
+            raise KoboError(str(exc)) from exc
+
+    if existing_asset:
+        asset_uid = checklist.kobo_asset_uid
+        if establishments_csv is not None:
+            replace_form_media(
+                asset_uid,
+                "establishments.csv",
+                establishments_csv,
+                "establishments.csv",
+            )
         asset_uid = import_xlsform(
-            file_handle,
-            filename,
+            BytesIO(xlsform_content),
+            xlsform_name,
             checklist.name,
-            destination=destination,
+            destination=_public_asset_url(existing_asset["uid"]),
+        )
+    else:
+        asset_uid = import_xlsform(
+            BytesIO(xlsform_content),
+            xlsform_name,
+            checklist.name,
+        )
+        if establishments_csv is not None:
+            replace_form_media(
+                asset_uid,
+                "establishments.csv",
+                establishments_csv,
+                "establishments.csv",
+            )
+        # Re-import now that the external CSV exists so KoBo keeps the
+        # select_one_from_file question in the final asset content.
+        asset_uid = import_xlsform(
+            BytesIO(xlsform_content),
+            xlsform_name,
+            checklist.name,
+            destination=_public_asset_url(asset_uid),
         )
 
     asset = get_asset(asset_uid)

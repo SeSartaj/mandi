@@ -14,7 +14,10 @@ Mandi screens live in `src/features` (`auth`, `dashboard`, `establishments`,
 from the copied CMS components rather than new page primitives. The Checklists
 screen lets administrators upload or replace `.xls`/`.xlsx` XLSForms, download
 them, and deploy them to KoBo. The Deploy action is guarded by
-`inspections.deploy_checklist` and displays the KoBo deployment status or error. Routes, permissions, user identity, and logout are
+`inspections.deploy_checklist` and displays the KoBo deployment status or error.
+Deployment adds the searchable Mandi establishment question and attaches the
+establishments CSV to the KoBo form. Establishment detail pages include a KoBo
+submissions panel that can sync and display submissions for that establishment. Routes, permissions, user identity, and logout are
 bound to those components. Breadcrumb labels and
 accessible control labels have been localized. The CMS active-position switcher
 and password dialog are omitted because those account APIs do not exist in

@@ -6,6 +6,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.accounts.services import require
 from apps.establishments.models import Establishment
+from apps.establishments.services import establishment_choice_csv
 from apps.integrations.kobo import KoboError, deploy_checklist_to_kobo
 
 from .models import Checklist, Inspection
@@ -103,7 +104,10 @@ def deploy_checklist(actor, pk):
     )
 
     try:
-        asset_uid, asset = deploy_checklist_to_kobo(checklist)
+        asset_uid, asset = deploy_checklist_to_kobo(
+            checklist,
+            establishments_csv=establishment_choice_csv(),
+        )
     except KoboError as exc:
         checklist.kobo_deployment_status = Checklist.DeploymentStatus.FAILED
         checklist.kobo_deployment_error = str(exc)

@@ -15,6 +15,8 @@ from apps.establishments.services import (
 from apps.establishments.models import SourceLink
 from apps.inspections.models import Checklist, Inspection
 from apps.integrations.kobo import KoboError
+from apps.integrations.models import KoboSubmission
+from apps.integrations.services import sync_kobo_submissions
 from apps.inspections.services import (
     approve_inspection,
     deploy_checklist,
@@ -208,6 +210,51 @@ class WorkflowTests(TestCase):
         self.assertEqual(result.kobo_asset_uid, "asset-123")
         self.assertEqual(result.kobo_deployment_status, "deployed")
         self.assertIsNotNone(result.kobo_deployed_at)
+
+    def test_kobo_establishment_csv_exposes_stable_ids(self):
+        response = self.client.get("/api/v1/integrations/kobo/establishments.csv")
+        self.assertEqual(response.status_code, 200)
+        text = response.content.decode()
+        self.assertIn("name,label,kind,province,district", text)
+        self.assertIn(str(self.e.pk), text)
+
+    def test_kobo_submission_sync_links_to_establishment(self):
+        self.checklist.kobo_asset_uid = "asset-test"
+        self.checklist.save(update_fields=["kobo_asset_uid"])
+        payload = [
+            {
+                "_id": 42,
+                "establishment_id": str(self.e.pk),
+                "_submission_time": "2026-11-01T10:00:00Z",
+                "question": "answer",
+            },
+            {
+                "_id": 43,
+                "establishment_id": "00000000-0000-0000-0000-000000000000",
+                "_submission_time": "2026-11-01T10:00:00Z",
+            },
+            {"_id": 44, "_submission_time": "2026-11-01T10:00:00Z"},
+        ]
+        asset = {
+            "uid": "asset-test",
+            "content": {
+                "survey": [
+                    {"name": "question", "type": "text", "label": ["Question"]}
+                ]
+            },
+        }
+        with (
+            patch("apps.integrations.services.fetch_submissions", return_value=payload),
+            patch("apps.integrations.services.get_asset", return_value=asset),
+        ):
+            counts = sync_kobo_submissions(self.manager, self.e.pk)
+
+        self.assertEqual(counts, {"fetched": 3, "created": 1, "updated": 0, "skipped": 2})
+        submission = KoboSubmission.objects.get()
+        self.assertEqual(submission.establishment, self.e)
+        self.assertEqual(submission.submission_id, "42")
+        self.assertEqual(submission.data["question"], "answer")
+        self.assertEqual(submission.form_schema["labels"]["question"], "Question")
 
     def test_checklist_applicability_and_team_validation(self):
         c = Checklist.objects.create(

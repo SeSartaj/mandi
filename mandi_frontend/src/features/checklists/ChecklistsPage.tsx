@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FileSpreadsheet, Plus, Rocket } from "lucide-react";
+import { Download, ExternalLink, FileSpreadsheet, Plus, Rocket } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -52,6 +52,21 @@ export default function ChecklistsPage() {
       client.invalidateQueries({ queryKey: ["form-checklists"] });
     },
   });
+  const downloadCsv = useMutation({
+    mutationFn: async () => {
+      const response = await api.get("/integrations/kobo/establishments.csv", {
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "establishments.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    },
+  });
 
   const close = () => {
     setOpen(false);
@@ -67,22 +82,34 @@ export default function ChecklistsPage() {
         title={t("Checklists")}
         description={t("Upload and manage the XLSForms used for inspections.")}
         actions={
-          <Can permission="inspections.add_checklist">
-            <Button
-              onClick={() => {
-                setEditing(null);
-                setOpen(true);
-              }}
-            >
-              <Plus />
-              {t("Add checklist")}
-            </Button>
-          </Can>
+          <div className="inline-actions">
+            <Can permission="establishments.view_establishment">
+              <Button
+                variant="outline"
+                disabled={downloadCsv.isPending}
+                onClick={() => downloadCsv.mutate()}
+              >
+                <Download />
+                {t("Download establishments CSV")}
+              </Button>
+            </Can>
+            <Can permission="inspections.add_checklist">
+              <Button
+                onClick={() => {
+                  setEditing(null);
+                  setOpen(true);
+                }}
+              >
+                <Plus />
+                {t("Add checklist")}
+              </Button>
+            </Can>
+          </div>
         }
       >
-        {deploy.error ? (
+        {deploy.error || downloadCsv.error ? (
           <div role="alert" className="error-box">
-            {errorMessage(deploy.error)}
+            {errorMessage(deploy.error ?? downloadCsv.error)}
           </div>
         ) : null}
 
@@ -140,6 +167,17 @@ export default function ChecklistsPage() {
                         <small className="text-destructive block max-w-72 whitespace-normal">
                           {checklist.kobo_deployment_error}
                         </small>
+                      ) : null}
+                      {checklist.kobo_project_url ? (
+                        <a
+                          className="text-link"
+                          href={checklist.kobo_project_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <ExternalLink className="size-4" />
+                          {t("Open in KoBo")}
+                        </a>
                       ) : null}
                     </div>
                   </TableCell>

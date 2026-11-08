@@ -15,6 +15,7 @@ def openapi_document():
         api.EstablishmentSerializer,
         api.SourceLinkSerializer,
         api.ChecklistSerializer,
+        api.KoboSubmissionSerializer,
         api.InspectionSerializer,
         api.IngestInput,
         api.SummaryInput,
@@ -262,6 +263,26 @@ def openapi_document():
         "post",
         "Upload and deploy the checklist XLSForm to KoBo",
         ref("ChecklistSerializer"),
+    )
+    route(
+        "/establishments/{pk}/kobo-submissions/",
+        "get",
+        "Stored KoBo submissions for an establishment",
+        page(ref("KoboSubmissionSerializer")),
+        query=True,
+    )
+    route(
+        "/integrations/kobo/sync/",
+        "post",
+        "Fetch KoBo submissions and attach them to Mandi establishments",
+        {"type": "object"},
+        {"type": "object"},
+    )
+    route(
+        "/integrations/kobo/establishments.csv",
+        "get",
+        "CSV of Mandi establishments for an XLSForm select_one_from_file question",
+        {"type": "string", "format": "binary"},
     )
     route(
         "/reports/coverage/",

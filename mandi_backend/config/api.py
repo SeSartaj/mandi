@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.http import HttpResponse
 from rest_framework import serializers
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
@@ -12,6 +14,7 @@ from apps.integrations import services as integrations
 from apps.reporting import services as reporting
 from apps.establishments.models import Establishment, SourceLink
 from apps.inspections.models import Inspection, Checklist
+from apps.integrations.models import KoboSubmission
 
 
 class MandiPagination(PageNumberPagination):
@@ -97,9 +100,52 @@ class EstablishmentSerializer(serializers.ModelSerializer):
 
 
 class ChecklistSerializer(serializers.ModelSerializer):
+    kobo_project_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Checklist
         fields = "__all__"
+
+    def get_kobo_project_url(self, obj):
+        if not obj.kobo_asset_uid:
+            return None
+        host = settings.KOBO_HOST_HEADER or settings.KOBO_BASE_URL
+        if "://" not in host:
+            host = f"http://{host}"
+        return f"{host.rstrip('/')}/#/forms/{obj.kobo_asset_uid}"
+
+
+class KoboSubmissionSerializer(serializers.ModelSerializer):
+    checklist_name = serializers.CharField(source="checklist.name", default=None)
+    checklist_version = serializers.CharField(source="checklist.version", default=None)
+    scores = serializers.SerializerMethodField()
+    answers = serializers.SerializerMethodField()
+    kobo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = KoboSubmission
+        fields = [
+            "id",
+            "asset_uid",
+            "submission_id",
+            "establishment_id",
+            "checklist_name",
+            "checklist_version",
+            "submitted_at",
+            "scores",
+            "answers",
+            "kobo_url",
+            "data",
+        ]
+
+    def get_scores(self, obj):
+        return integrations.extract_scores(obj.data)
+
+    def get_answers(self, obj):
+        return integrations.submission_answers(obj.data, obj.form_schema)
+
+    def get_kobo_url(self, obj):
+        return integrations.kobo_asset_url(obj.asset_uid)
 
 
 class InspectionSerializer(serializers.ModelSerializer):
@@ -408,3 +454,39 @@ class Choices(APIView):
 class Coverage(APIView):
     def get(self, request):
         return Response(reporting.coverage(request.user, filters(request)))
+
+
+class EstablishmentKoboSubmissions(APIView):
+    def get(self, request, pk):
+        return paginated(
+            request,
+            integrations.kobo_submissions(request.user, pk),
+            KoboSubmissionSerializer,
+        )
+
+
+class KoboSync(APIView):
+    def post(self, request):
+        class Input(serializers.Serializer):
+            establishment_id = serializers.UUIDField(required=False)
+
+        values = validated(Input, request.data)
+        return Response(
+            integrations.sync_kobo_submissions(
+                request.user,
+                establishment_id=values.get("establishment_id"),
+            )
+        )
+
+
+class KoboEstablishmentsCsv(APIView):
+    def get(self, request):
+        accounts.require(request.user, "establishments.view_establishment")
+        response = HttpResponse(
+            establishments.establishment_choice_csv(),
+            content_type="text/csv; charset=utf-8",
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="establishments.csv"'
+        )
+        return response

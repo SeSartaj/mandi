@@ -1,3 +1,6 @@
+import csv
+import io
+
 from django.db import transaction, IntegrityError
 from django.core.exceptions import ValidationError as ModelValidationError
 from django.db.models import Q
@@ -95,3 +98,24 @@ def disconnect_source(actor, pk, source):
     link = SourceLink.objects.filter(establishment=obj, source=source).first()
     if link:
         link.delete()
+
+
+def establishment_choice_csv(limit=None):
+    """CSV consumed by an XLSForm select_one_from_file establishments.csv."""
+    qs = Establishment.objects.order_by("-updated_at")
+    if limit:
+        qs = qs[:limit]
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["name", "label", "kind", "province", "district"])
+    for establishment in qs.iterator():
+        writer.writerow(
+            [
+                str(establishment.pk),
+                f"{establishment.name} — {establishment.province} — {establishment.get_kind_display()}",
+                establishment.kind,
+                establishment.province,
+                establishment.district,
+            ]
+        )
+    return buffer.getvalue().encode("utf-8")
