@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import React, { useEffect, useRef, useState } from "react";
 import { FormField } from "@/components/ui/form";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -72,6 +73,7 @@ const BaseInput = React.forwardRef<HTMLInputElement, BaseInputProps>(
     },
     ref,
   ) => {
+    const { t } = useTranslation();
     const [showPassword, setShowPassword] = useState(false);
 
     const inputType = type === "password" ? (showPassword ? "text" : "password") : type;
@@ -121,11 +123,11 @@ const BaseInput = React.forwardRef<HTMLInputElement, BaseInputProps>(
                   type="button"
                   variant="ghost"
                   size="sm"
-                  tabIndex={-1}
                   className="hover:bg-transparent"
                   onClick={() => setShowPassword((p) => !p)}
                   disabled={disabled}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={t(showPassword ? "Hide password" : "Show password")}
+                  aria-pressed={showPassword}
                 >
                   {showPassword ? (
                     <EyeIcon className="h-4 w-4" aria-hidden="true" />
@@ -251,7 +253,7 @@ function FormInput<T extends FieldValues>({
             labelClassName={labelClassName}
             containerClassName={containerClassName}
             label={label}
-            required={inputProps.required}
+            required={inputProps.required || Boolean(rules?.required)}
             reserveErrorSpace={reserveErrorSpace}
           >
             <BaseInput
@@ -259,6 +261,7 @@ function FormInput<T extends FieldValues>({
               {...field}
               value={displayValue}
               onChange={handleChange}
+              aria-required={inputProps.required || Boolean(rules?.required)}
               hasError={!!fieldState.error}
               leftAddon={finalLeftAddon}
               dir={prefixValue || mask ? "ltr" : inputProps.dir}

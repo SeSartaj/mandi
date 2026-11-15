@@ -64,12 +64,7 @@ export default function InspectionDetailPage() {
       />
 
       {approve.error ? <AppErrorState message={errorMessage(approve.error)} /> : null}
-      {inspection.is_demo ? (
-        <Badge variant="secondary">
-          {t("Demonstration data")} ·{" "}
-          {t("Local review build · Live integrations are not connected.")}
-        </Badge>
-      ) : null}
+      {inspection.is_demo ? <Badge variant="secondary">{t("Demonstration data")}</Badge> : null}
 
       <PageSection title={t("Details")} contentClassName="pt-4">
         <dl className="info-grid">

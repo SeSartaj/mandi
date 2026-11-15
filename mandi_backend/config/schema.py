@@ -67,6 +67,7 @@ def openapi_document():
         query=False,
         code=200,
         public=False,
+        params=None,
     ):
         op = {
             "summary": description,
@@ -74,6 +75,18 @@ def openapi_document():
             "parameters": [],
             "security": [] if public else [{"tokenAuth": []}],
         }
+        if params:
+            for name in params:
+                op["parameters"].append(
+                    {"name": name, "in": "query", "schema": {"type": "string"}}
+                )
+            op["parameters"].append(
+                {
+                    "name": "page",
+                    "in": "query",
+                    "schema": {"type": "integer", "minimum": 1},
+                }
+            )
         if output:
             op["responses"][str(code)]["content"] = {
                 "application/json": {"schema": output}
@@ -259,10 +272,46 @@ def openapi_document():
         ref("ChecklistSerializer"),
     )
     route(
+        "/checklists/{pk}/",
+        "get",
+        "One checklist with its submission count",
+        ref("ChecklistSerializer"),
+    )
+    route(
+        "/checklists/{pk}/submissions/",
+        "get",
+        "Submissions of one checklist; filter by search, establishment or date",
+        page(ref("KoboSubmissionSerializer")),
+        params=["search", "establishment_id", "date_from", "date_to", "page_size"],
+    )
+    route(
         "/checklists/{pk}/deploy/",
         "post",
         "Upload and deploy the checklist XLSForm to KoBo",
         ref("ChecklistSerializer"),
+    )
+    route(
+        "/checklists/{pk}/link-kobo/",
+        "post",
+        "Attach an existing KoBo project UID to a checklist",
+        ref("ChecklistSerializer"),
+        {
+            "type": "object",
+            "required": ["asset_uid"],
+            "properties": {"asset_uid": {"type": "string"}},
+        },
+    )
+    route(
+        "/kobo-submissions/{pk}/",
+        "get",
+        "One submission with scores, typed answers and attachments",
+        ref("KoboSubmissionSerializer"),
+    )
+    route(
+        "/kobo-submissions/{pk}/attachments/{index}/",
+        "get",
+        "Stream one uploaded file from KoBo through Mandi",
+        {"type": "string", "format": "binary"},
     )
     route(
         "/establishments/{pk}/kobo-submissions/",

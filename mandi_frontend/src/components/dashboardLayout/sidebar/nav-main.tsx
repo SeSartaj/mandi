@@ -42,7 +42,15 @@ export function NavMain() {
                 tooltip={t(title)}
                 isActive={pathname === url || (url !== "/" && pathname.startsWith(url + "/"))}
               >
-                <Link to={url} onClick={() => setOpenMobile(false)}>
+                <Link
+                  aria-current={
+                    pathname === url || (url !== "/" && pathname.startsWith(url + "/"))
+                      ? "page"
+                      : undefined
+                  }
+                  to={url}
+                  onClick={() => setOpenMobile(false)}
+                >
                   <Icon />
                   <span>{t(title)}</span>
                 </Link>

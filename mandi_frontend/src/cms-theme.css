@@ -67,8 +67,8 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.3 0.06 255);
 
-  /* Brand Blue */
-  --primary: oklch(0.6 0.23 255);
+  /* Muted navy brand palette. */
+  --primary: #1e3557;
   --primary-foreground: oklch(1 0 0);
 
   /* Neutral secondary (مثل دکمه‌های secondary در Jira) */
@@ -79,8 +79,8 @@
   --muted-foreground: oklch(0.55 0.03 255);
 
   /* Subtle blue highlight (hover/selected) */
-  --accent: oklch(0.93 0.05 255);
-  --accent-foreground: oklch(0.3 0.06 255);
+  --accent: #e8edf4;
+  --accent-foreground: #1e3557;
 
   --destructive: oklch(0.62 0.21 25);
   --destructive-foreground: oklch(1 0 0);
@@ -88,7 +88,7 @@
   --border: oklch(0.9 0.01 255);
   --input: oklch(0.9 0.01 255);
   --input-bg: oklch(98.426% 0.00749 260.893);
-  --ring: oklch(0.68 0.2 255);
+  --ring: #536d91;
 
   --flow-registrations: oklch(0.62 0.12 255);
   --flow-completed: oklch(0.62 0.1 150);
@@ -96,7 +96,7 @@
   --flow-cancelled: oklch(0.58 0.04 255);
 
   /* Charts (نزدیک به رنگ‌های رایج Atlassian) */
-  --chart-1: oklch(0.6 0.23 255); /* blue */
+  --chart-1: #1e3557; /* navy */
   --chart-2: oklch(0.55 0.14 160); /* green */
   --chart-3: oklch(0.56 0.16 285); /* purple */
   --chart-4: oklch(0.71 0.18 55); /* orange */
@@ -107,15 +107,15 @@
   --sidebar-foreground: oklch(0.3 0.06 255);
 
   /* بخش/آیتم مهم در سایدبار */
-  --sidebar-primary: oklch(0.93 0.05 255);
-  --sidebar-primary-foreground: oklch(0.6 0.23 255);
+  --sidebar-primary: #1e3557;
+  --sidebar-primary-foreground: #ffffff;
 
   /* selected/hover در سایدبار */
-  --sidebar-accent: oklch(0.93 0.05 255);
-  --sidebar-accent-foreground: oklch(0.6 0.23 255);
+  --sidebar-accent: #e8edf4;
+  --sidebar-accent-foreground: #1e3557;
 
   --sidebar-border: oklch(0.9 0.01 255);
-  --sidebar-ring: oklch(0.68 0.2 255);
+  --sidebar-ring: #536d91;
 }
 
 .dark {
@@ -129,9 +129,9 @@
   --popover: oklch(0.26 0.01 255);
   --popover-foreground: oklch(0.82 0.02 255);
 
-  /* Brand Blue (روشن‌تر برای دارک مود) */
-  --primary: oklch(0.68 0.2 255);
-  --primary-foreground: oklch(1 0 0);
+  /* Softer slate blue keeps the navy identity readable on dark surfaces. */
+  --primary: #9aafc9;
+  --primary-foreground: #142238;
 
   --secondary: oklch(0.32 0.01 255);
   --secondary-foreground: oklch(0.82 0.02 255);
@@ -140,8 +140,8 @@
   --muted-foreground: oklch(0.74 0.02 255);
 
   /* Subtle selected bg در دارک */
-  --accent: oklch(0.3 0.03 255);
-  --accent-foreground: oklch(0.82 0.02 255);
+  --accent: #28364b;
+  --accent-foreground: #c2cfe0;
 
   --destructive: oklch(0.62 0.21 25);
   --destructive-foreground: oklch(1 0 0);
@@ -149,14 +149,14 @@
   --border: oklch(0.32 0.01 255);
   --input: oklch(0.32 0.01 255 / 0.9);
   --input-bg: oklch(0.3 0.015 255);
-  --ring: oklch(0.76 0.16 255);
+  --ring: #9aafc9;
 
   --flow-registrations: oklch(0.72 0.12 255);
   --flow-completed: oklch(0.72 0.1 150);
   --flow-rejected: oklch(0.72 0.12 25);
   --flow-cancelled: oklch(0.7 0.04 255);
 
-  --chart-1: oklch(0.68 0.2 255);
+  --chart-1: #9aafc9;
   --chart-2: oklch(0.6 0.13 160);
   --chart-3: oklch(0.66 0.14 285);
   --chart-4: oklch(0.75 0.16 55);
@@ -166,14 +166,14 @@
   --sidebar: oklch(0.2 0.01 255);
   --sidebar-foreground: oklch(0.82 0.02 255);
 
-  --sidebar-primary: oklch(0.25 0.1 255);
-  --sidebar-primary-foreground: oklch(0.76 0.16 255);
+  --sidebar-primary: #9aafc9;
+  --sidebar-primary-foreground: #142238;
 
-  --sidebar-accent: oklch(0.3 0.03 255);
-  --sidebar-accent-foreground: oklch(0.76 0.16 255);
+  --sidebar-accent: #28364b;
+  --sidebar-accent-foreground: #c2cfe0;
 
   --sidebar-border: oklch(0.32 0.01 255 / 0.7);
-  --sidebar-ring: oklch(0.76 0.16 255);
+  --sidebar-ring: #9aafc9;
 }
 
 @layer base {

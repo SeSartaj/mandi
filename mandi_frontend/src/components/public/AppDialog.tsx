@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { DialogFormState } from "./dialog-form-state";
+import { Button } from "@/components/ui/button";
 import { XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
@@ -99,7 +101,7 @@ export function AppDialog({
   titleClassName,
   descriptionClassName,
 
-  closeOnOverlayClick = true,
+  closeOnOverlayClick = false,
   contentProps,
 
   // Root props
@@ -110,7 +112,11 @@ export function AppDialog({
 }: AppDialogProps) {
   const locale = useLocale();
   const { t } = useTranslation();
+  const descriptionId = React.useId();
   const resolvedCloseLabel = closeLabel ?? t("Close");
+
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
+  const [formState, setFormState] = React.useState({ dirty: false, busy: false });
 
   // Controlled vs uncontrolled logic
   const isControlled = openProp !== undefined;
@@ -122,10 +128,15 @@ export function AppDialog({
   // setOpen updates internal state (when uncontrolled) and calls onOpenChange either way
   const setOpen = React.useCallback(
     (v: boolean) => {
+      if (!v && formState.busy) return;
+      if (!v && formState.dirty) {
+        setConfirmDiscard(true);
+        return;
+      }
       if (!isControlled) setInternalOpen(v);
       onOpenChange?.(v);
     },
-    [isControlled, onOpenChange],
+    [isControlled, onOpenChange, formState],
   );
 
   // Convenience close method for render-props
@@ -144,72 +155,107 @@ export function AppDialog({
   const { onInteractOutside: userOnInteractOutside, ...restContentProps } = contentProps ?? {};
 
   return (
-    <Dialog open={open} onOpenChange={setOpen} {...rootProps}>
-      {trigger ? (
-        <DialogTrigger
+    <>
+      <Dialog open={open} onOpenChange={setOpen} {...rootProps}>
+        {trigger ? (
+          <DialogTrigger
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+            {...triggerProps}
+            asChild={triggerAsChild}
+          >
+            {trigger}
+          </DialogTrigger>
+        ) : null}
+
+        <DialogContent
           onClick={(e) => {
             e.stopPropagation();
           }}
-          {...triggerProps}
-          asChild={triggerAsChild}
+          {...restContentProps}
+          // We disable the built-in close button from your DialogContent wrapper
+          // because it is hardcoded (right-4, "Close"). We'll render our own below
+          // to support RTL and custom closeLabel.
+          showCloseButton={false}
+          aria-describedby={
+            restContentProps["aria-describedby"] ?? (description ? descriptionId : undefined)
+          }
+          onInteractOutside={(e) => {
+            // Prevent closing when closeOnOverlayClick is false
+            if (!closeOnOverlayClick) e.preventDefault();
+
+            // Call user's handler if provided
+            userOnInteractOutside?.(e);
+          }}
+          className={cn("max-h-[90vh] overflow-y-auto", sizeClasses[size], contentClassName)}
         >
-          {trigger}
-        </DialogTrigger>
-      ) : null}
+          {(title || description) && (
+            <DialogHeader className={cn("pe-8", headerClassName)}>
+              {title ? (
+                <DialogTitle className={cn("text-start", titleClassName)}>{title}</DialogTitle>
+              ) : null}
 
-      <DialogContent
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
-        {...restContentProps}
-        // We disable the built-in close button from your DialogContent wrapper
-        // because it is hardcoded (right-4, "Close"). We'll render our own below
-        // to support RTL and custom closeLabel.
-        showCloseButton={false}
-        onInteractOutside={(e) => {
-          // Prevent closing when closeOnOverlayClick is false
-          if (!closeOnOverlayClick) e.preventDefault();
+              {description ? (
+                <DialogDescription
+                  id={descriptionId}
+                  className={cn("text-start", descriptionClassName)}
+                >
+                  {description}
+                </DialogDescription>
+              ) : null}
+            </DialogHeader>
+          )}
 
-          // Call user's handler if provided
-          userOnInteractOutside?.(e);
-        }}
-        className={cn("max-h-[90vh] overflow-y-auto", sizeClasses[size], contentClassName)}
-      >
-        {(title || description) && (
-          <DialogHeader className={cn(headerClassName)}>
-            {title ? (
-              <DialogTitle className={cn("text-start", titleClassName)}>{title}</DialogTitle>
-            ) : null}
+          <DialogFormState.Provider value={setFormState}>
+            {resolvedChildren}
+          </DialogFormState.Provider>
 
-            {description ? (
-              <DialogDescription className={cn("text-start", descriptionClassName)}>
-                {description}
-              </DialogDescription>
-            ) : null}
+          {resolvedFooter ? (
+            <DialogFooter className={cn(footerClassName)}>{resolvedFooter}</DialogFooter>
+          ) : null}
+
+          {showCloseButton && (
+            <DialogClose
+              aria-label={resolvedCloseLabel}
+              className={cn(
+                "absolute top-4 rounded-xs opacity-70 transition-opacity hover:opacity-100",
+                "focus:ring-ring ring-offset-background focus:ring-2 focus:ring-offset-2 focus:outline-hidden",
+                "disabled:pointer-events-none",
+                isRTL(locale) ? "left-4" : "right-4",
+              )}
+            >
+              <XIcon className="size-4" />
+              <span className="sr-only">{resolvedCloseLabel}</span>
+            </DialogClose>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
+        <DialogContent showCloseButton={false} className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("Discard unsaved changes?")}</DialogTitle>
+            <DialogDescription>
+              {t("Your changes have not been saved. You can keep editing or discard them.")}
+            </DialogDescription>
           </DialogHeader>
-        )}
-
-        {resolvedChildren}
-
-        {resolvedFooter ? (
-          <DialogFooter className={cn(footerClassName)}>{resolvedFooter}</DialogFooter>
-        ) : null}
-
-        {showCloseButton && (
-          <DialogClose
-            aria-label={resolvedCloseLabel}
-            className={cn(
-              "absolute top-4 rounded-xs opacity-70 transition-opacity hover:opacity-100",
-              "focus:ring-ring ring-offset-background focus:ring-2 focus:ring-offset-2 focus:outline-hidden",
-              "disabled:pointer-events-none",
-              isRTL(locale) ? "left-4" : "right-4",
-            )}
-          >
-            <XIcon className="size-4" />
-            <span className="sr-only">{resolvedCloseLabel}</span>
-          </DialogClose>
-        )}
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDiscard(false)}>
+              {t("Keep editing")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setConfirmDiscard(false);
+                if (!isControlled) setInternalOpen(false);
+                onOpenChange?.(false);
+              }}
+            >
+              {t("Discard changes")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

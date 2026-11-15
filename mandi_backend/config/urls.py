@@ -35,8 +35,16 @@ for route, view in [
     ("integrations/kobo/sync/", api.KoboSync),
     ("integrations/kobo/establishments.csv", api.KoboEstablishmentsCsv),
     ("checklists/", api.Checklists),
+    ("checklists/metadata/", api.ChecklistMetadata),
     ("checklists/<int:pk>/", api.ChecklistDetail),
+    ("checklists/<int:pk>/submissions/", api.ChecklistSubmissions),
     ("checklists/<int:pk>/deploy/", api.ChecklistDeploy),
+    ("checklists/<int:pk>/link-kobo/", api.ChecklistLinkKobo),
+    ("kobo-submissions/<int:pk>/", api.KoboSubmissionDetail),
+    (
+        "kobo-submissions/<int:pk>/attachments/<int:index>/",
+        api.KoboSubmissionAttachment,
+    ),
     ("reports/coverage/", api.Coverage),
 ]:
     urlpatterns.append(path("api/v1/" + route, view.as_view()))

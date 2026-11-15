@@ -33,3 +33,10 @@ Source-system and inspection fixture data remain demonstrations. Live integratio
 The copied `Can` component guards routes, navigation, and actions. All CMS custom form components have been copied, and active forms use their React Hook Form wrappers. See [permissions and calendar notes](../docs/permissions-and-calendars.md) for group definitions, adaptations, and verification.
 
 Run `npm test` for permission/calendar checks.
+
+## Usability and reliability review
+
+See [frontend usability review](../docs/frontend-usability-review.md) for the
+10-heuristic assessment, shared-component refactors, regression checks, browser
+verification, and the remaining deployment boundary. Run `npm test` for both
+permission/calendar and frontend state/session regression tests.

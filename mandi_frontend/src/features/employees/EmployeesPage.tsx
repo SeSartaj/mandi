@@ -34,6 +34,7 @@ export default function EmployeesPage() {
   return (
     <div className="space-y-6">
       <PageSection
+        headingLevel={1}
         title={t("Employees")}
         description={t("Employee directory")}
         actions={

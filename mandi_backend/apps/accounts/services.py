@@ -69,3 +69,17 @@ def permission_groups(actor):
         .prefetch_related("permissions__content_type")
         .order_by("name")
     )
+
+
+def scope_checklists(actor, queryset, field="pk"):
+    """Apply the user's checklist allowlist after normal model permissions."""
+    if actor.is_superuser or not actor.restrict_checklist_access:
+        return queryset
+    return queryset.filter(**{f"{field}__in": actor.allowed_checklists.values("pk")})
+
+
+def require_checklist_access(actor, checklist_id):
+    if actor.is_superuser or not actor.restrict_checklist_access:
+        return
+    if not actor.allowed_checklists.filter(pk=checklist_id).exists():
+        raise PermissionDenied("You do not have access to this checklist.")

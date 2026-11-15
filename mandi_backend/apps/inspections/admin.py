@@ -23,6 +23,10 @@ class ChecklistAdmin(admin.ModelAdmin):
     search_fields = ("name", "code", "version")
     ordering = ("name", "version")
 
+    def get_queryset(self, request):
+        from apps.accounts.services import scope_checklists
+        return scope_checklists(request.user, super().get_queryset(request))
+
     def has_delete_permission(self, request, obj=None):
         return False
 
@@ -38,6 +42,16 @@ class ChecklistAdmin(admin.ModelAdmin):
 
 @admin.register(Inspection)
 class InspectionAdmin(AddOnlyAdmin):
+    def get_queryset(self, request):
+        from apps.accounts.services import scope_checklists
+        return scope_checklists(request.user, super().get_queryset(request), "checklist_id")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "checklist":
+            from apps.accounts.services import scope_checklists
+            kwargs["queryset"] = scope_checklists(request.user, Checklist.objects.all())
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     fields = (
         "establishment",
         "checklist",

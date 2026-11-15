@@ -1,8 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useWatch } from "react-hook-form";
 import { FileSpreadsheet } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
+import { DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import CustomFileInput from "@/components/ui/custom/CustomFileInput";
 import CustomForm from "@/components/ui/custom/CustomForm";
@@ -34,10 +37,47 @@ export default function ChecklistForm({
       code: existing?.code ?? "",
       name: existing?.name ?? "",
       version: existing?.version ?? "",
-      establishment_kind: existing?.establishment_kind ?? "pharmacy",
+      establishment_kind: existing?.establishment_kind ?? "",
       xlsform: null,
     },
   });
+  const file = useWatch({ control: form.control, name: "xlsform" });
+  const [reading, setReading] = useState(false);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file) {
+      setReading(false);
+      setMetadataError(null);
+      return;
+    }
+    const controller = new AbortController();
+    const body = new FormData();
+    body.append("xlsform", file);
+    setReading(true);
+    setMetadataError(null);
+    api
+      .post<Partial<Record<"name" | "code" | "version" | "establishment_kind", string>>>(
+        "/checklists/metadata/",
+        body,
+        { signal: controller.signal },
+      )
+      .then(({ data }) => {
+        if (controller.signal.aborted) return;
+        for (const field of ["name", "code", "version", "establishment_kind"] as const) {
+          // Never overwrite existing records or values the user has edited.
+          if (!form.getFieldState(field).isDirty && !existing) {
+            form.setValue(field, data[field] ?? "", { shouldValidate: true });
+          }
+        }
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setMetadataError(errorMessage(error));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setReading(false);
+      });
+    return () => controller.abort();
+  }, [file, form, existing]);
   const mutation = useMutation({
     mutationFn: async (values: ChecklistValues) => {
       const body = new FormData();
@@ -60,39 +100,12 @@ export default function ChecklistForm({
   });
 
   return (
-    <CustomForm form={form} onSubmit={(values) => mutation.mutate(values)} className="space-y-4">
-      <div className="form-grid">
-        <FormInput form={form} name="name" label={t("Name")} rules={{ required: t("Required") }} />
-        <FormInput
-          form={form}
-          name="code"
-          label={t("Checklist code")}
-          rules={{ required: t("Required") }}
-        />
-        <FormInput
-          form={form}
-          name="version"
-          label={t("Version")}
-          rules={{ required: t("Required") }}
-        />
-        <FormSelect
-          form={form}
-          name="establishment_kind"
-          label={t("Type")}
-          items={establishmentKinds.map((value) => ({
-            value,
-            label: t(choiceLabel(value)),
-          }))}
-        />
-      </div>
-
-      {existing?.xlsform ? (
-        <a className="text-link" href={fileUrl(existing.xlsform)} target="_blank" rel="noreferrer">
-          <FileSpreadsheet className="size-4" />
-          {t("Current XLSForm")}
-        </a>
-      ) : null}
-
+    <CustomForm
+      busy={mutation.isPending}
+      form={form}
+      onSubmit={(values) => mutation.mutate(values)}
+      className="space-y-4"
+    >
       <CustomFileInput
         form={form}
         name="xlsform"
@@ -105,6 +118,56 @@ export default function ChecklistForm({
         description={t("Upload the .xls or .xlsx form used for this checklist.")}
         required={!existing}
       />
+      <p className="text-muted-foreground text-sm">
+        {t(
+          "Checklist details are read from the XLSForm settings. Review them and fill in any missing values.",
+        )}
+      </p>
+      {reading && <p role="status">{t("Reading XLSForm settings...")}</p>}
+      {metadataError && (
+        <div role="alert" className="error-box">
+          {metadataError}
+        </div>
+      )}
+      <fieldset disabled={reading || mutation.isPending}>
+        <div className="form-grid">
+          <FormInput
+            form={form}
+            name="name"
+            label={t("Name")}
+            rules={{ required: t("Required") }}
+          />
+          <FormInput
+            form={form}
+            name="code"
+            label={t("Checklist code")}
+            rules={{ required: t("Required") }}
+          />
+          <FormInput
+            form={form}
+            name="version"
+            label={t("Version")}
+            rules={{ required: t("Required") }}
+          />
+          <FormSelect
+            form={form}
+            name="establishment_kind"
+            label={t("Type")}
+            rules={{ required: t("Required") }}
+            items={establishmentKinds.map((value) => ({
+              value,
+              label: t(choiceLabel(value)),
+            }))}
+          />
+        </div>
+      </fieldset>
+
+      {existing?.xlsform ? (
+        <a className="text-link" href={fileUrl(existing.xlsform)} target="_blank" rel="noreferrer">
+          <FileSpreadsheet className="size-4" />
+          {t("Current XLSForm")}
+        </a>
+      ) : null}
 
       {mutation.error ? (
         <div role="alert" className="error-box">
@@ -112,10 +175,14 @@ export default function ChecklistForm({
         </div>
       ) : null}
       <div className="form-actions">
-        <Button type="button" variant="outline" onClick={onClose}>
-          {t("Cancel")}
+        <DialogClose asChild>
+          <Button type="button" variant="outline" disabled={mutation.isPending}>
+            {t("Cancel")}
+          </Button>
+        </DialogClose>
+        <Button disabled={mutation.isPending || reading}>
+          {mutation.isPending ? t("Saving…") : t("Save")}
         </Button>
-        <Button disabled={mutation.isPending}>{t("Save")}</Button>
       </div>
     </CustomForm>
   );

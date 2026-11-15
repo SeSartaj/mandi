@@ -26,7 +26,7 @@ export default function ReportsPage() {
       />
 
       <PageSection title={t("Inspection coverage")} contentClassName="space-y-4 pt-4">
-        <InspectionFilters onApply={setFilters} />
+        <InspectionFilters initial={filters} onApply={setFilters} />
         {coverage.isPending ? (
           <AppLoader label={t("Loading…")} className="py-8" />
         ) : coverage.error ? (

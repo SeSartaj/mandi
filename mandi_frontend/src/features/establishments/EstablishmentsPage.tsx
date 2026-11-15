@@ -17,16 +17,17 @@ import EstablishmentForm from "@/features/establishments/EstablishmentForm";
 import { useApiQuery } from "@/features/shared/api";
 import { choiceLabel, establishmentKinds, pageCount } from "@/features/shared/labels";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useListParams } from "@/hooks/useListParams";
 import { useTablePageSize } from "@/hooks/useTablePageSize";
 import type { Establishment, Page } from "@/lib/api";
 import { errorMessage } from "@/lib/api";
 
 export default function EstablishmentsPage() {
   const { t } = useTranslation();
-  const [search, setSearch] = useState("");
+  const { params, update, page, setPage } = useListParams();
+  const search = params.get("search") ?? "";
   const debouncedSearch = useDebouncedValue(search, 300);
-  const [kind, setKind] = useState("");
-  const [page, setPage] = useState(1);
+  const kind = params.get("kind") ?? "";
   const [pageSize, setPageSize] = useTablePageSize();
   const [open, setOpen] = useState(false);
   const data = useApiQuery<Page<Establishment>>(["establishments"], "/establishments/", {
@@ -43,6 +44,7 @@ export default function EstablishmentsPage() {
   return (
     <div className="space-y-6">
       <PageSection
+        headingLevel={1}
         title={t("Establishments")}
         description={t("Monitoring & inspection registry")}
         actions={
@@ -56,14 +58,13 @@ export default function EstablishmentsPage() {
       >
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-60 flex-1">
+            <div className="relative min-w-0 flex-1 basis-60">
               <Search className="text-muted-foreground absolute start-3 top-1/2 size-4 -translate-y-1/2" />
               <Input
                 className="ps-9"
                 value={search}
                 onChange={(event) => {
-                  setSearch(event.target.value);
-                  setPage(1);
+                  update({ search: event.target.value }, true, true);
                 }}
                 aria-label={t("Search establishments")}
                 placeholder={t("Search establishments")}
@@ -73,8 +74,7 @@ export default function EstablishmentsPage() {
               label={t("All types")}
               value={kind || "__all__"}
               onChange={(value) => {
-                setKind(value === "__all__" ? "" : String(value));
-                setPage(1);
+                update({ kind: value === "__all__" ? "" : String(value) });
               }}
               options={[
                 { value: "__all__", label: t("All types") },
@@ -84,6 +84,11 @@ export default function EstablishmentsPage() {
                 })),
               ]}
             />
+            {(search || kind) && (
+              <Button variant="ghost" onClick={() => update({ search: "", kind: "" })}>
+                {t("Clear filters")}
+              </Button>
+            )}
           </div>
 
           {data.isPending ? (

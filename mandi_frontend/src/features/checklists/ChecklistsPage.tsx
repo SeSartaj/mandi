@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Download, ExternalLink, FileSpreadsheet, Plus, Rocket } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import { Can } from "@/components/Can";
 import { PageSection } from "@/components/PageSection";
@@ -10,7 +11,7 @@ import { AppErrorState } from "@/components/public/AppErrorState";
 import { AppLoader } from "@/components/public/AppLoader";
 import AppTable from "@/components/public/AppTable";
 import { SystemDateTime } from "@/components/public/SystemDateTime";
-import { Badge } from "@/components/ui/badge";
+import { DeploymentBadge } from "./DeploymentBadge";
 import { Button } from "@/components/ui/button";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import ChecklistForm from "@/features/checklists/ChecklistForm";
@@ -19,34 +20,16 @@ import { choiceLabel } from "@/features/shared/labels";
 import type { Checklist } from "@/lib/api";
 import { api, errorMessage, fileUrl } from "@/lib/api";
 
-function DeploymentBadge({ status }: { status: Checklist["kobo_deployment_status"] }) {
-  const { t } = useTranslation();
-  const variants: Record<
-    Checklist["kobo_deployment_status"],
-    "default" | "secondary" | "destructive" | "outline"
-  > = {
-    not_deployed: "secondary",
-    deploying: "outline",
-    deployed: "default",
-    failed: "destructive",
-  };
-  const labels: Record<Checklist["kobo_deployment_status"], string> = {
-    not_deployed: "Not deployed",
-    deploying: "Deploying…",
-    deployed: "Deployed",
-    failed: "Deployment failed",
-  };
-  return <Badge variant={variants[status]}>{t(labels[status])}</Badge>;
-}
-
 export default function ChecklistsPage() {
   const { t } = useTranslation();
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [deploying, setDeploying] = useState<Checklist | null>(null);
   const [editing, setEditing] = useState<Checklist | null>(null);
   const checklists = useApiQuery<Checklist[]>(["checklists"], "/checklists/");
   const deploy = useMutation({
     mutationFn: (checklist: Checklist) => api.post(`/checklists/${checklist.id}/deploy/`),
+    onSuccess: () => setDeploying(null),
     onSettled: () => {
       client.invalidateQueries({ queryKey: ["checklists"] });
       client.invalidateQueries({ queryKey: ["form-checklists"] });
@@ -79,6 +62,7 @@ export default function ChecklistsPage() {
   return (
     <div className="space-y-6">
       <PageSection
+        headingLevel={1}
         title={t("Checklists")}
         description={t("Upload and manage the XLSForms used for inspections.")}
         actions={
@@ -136,7 +120,11 @@ export default function ChecklistsPage() {
             <TableBody>
               {rows.map((checklist) => (
                 <TableRow key={checklist.id}>
-                  <TableCell>{checklist.name}</TableCell>
+                  <TableCell>
+                    <Link className="entity-link" to={`/checklists/${checklist.id}`}>
+                      {checklist.name}
+                    </Link>
+                  </TableCell>
                   <TableCell>{checklist.code}</TableCell>
                   <TableCell>{checklist.version}</TableCell>
                   <TableCell>{t(choiceLabel(checklist.establishment_kind))}</TableCell>
@@ -198,8 +186,15 @@ export default function ChecklistsPage() {
                       <Can permission="inspections.deploy_checklist">
                         <Button
                           size="sm"
-                          disabled={!checklist.xlsform || deploy.isPending}
-                          onClick={() => deploy.mutate(checklist)}
+                          disabled={
+                            !checklist.xlsform ||
+                            deploy.isPending ||
+                            checklist.kobo_deployment_status === "deploying"
+                          }
+                          onClick={() => {
+                            deploy.reset();
+                            setDeploying(checklist);
+                          }}
                         >
                           <Rocket />
                           {deployingId === checklist.id ? t("Deploying…") : t("Deploy")}
@@ -220,6 +215,51 @@ export default function ChecklistsPage() {
           </AppTable>
         )}
       </PageSection>
+
+      <AppDialog
+        open={Boolean(deploying)}
+        onOpenChange={(value) => {
+          if (!value && !deploy.isPending) setDeploying(null);
+        }}
+        title={t("Deploy checklist?")}
+        description={t(
+          "This will publish this checklist version to KoBo. Review the name and version before continuing.",
+        )}
+        showCloseButton={!deploy.isPending}
+        contentProps={{
+          onEscapeKeyDown: (event) => {
+            if (deploy.isPending) event.preventDefault();
+          },
+        }}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              disabled={deploy.isPending}
+              onClick={() => setDeploying(null)}
+            >
+              {t("Cancel")}
+            </Button>
+            <Button
+              disabled={deploy.isPending}
+              onClick={() => {
+                if (deploying) deploy.mutate(deploying);
+              }}
+            >
+              {deploy.isPending ? t("Deploying…") : t("Deploy")}
+            </Button>
+          </>
+        }
+      >
+        <p className="font-medium">
+          {deploying?.name} · {deploying?.version}
+        </p>
+        {deploy.error && (
+          <div role="alert" className="error-box">
+            {errorMessage(deploy.error)}
+          </div>
+        )}
+      </AppDialog>
 
       <AppDialog
         open={open}

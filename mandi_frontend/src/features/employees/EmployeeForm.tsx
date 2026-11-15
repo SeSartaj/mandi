@@ -2,7 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
+import { useSession } from "@/lib/session";
+import { AppErrorState } from "@/components/public/AppErrorState";
 import { Can } from "@/components/Can";
+import { DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import CustomForm from "@/components/ui/custom/CustomForm";
 import FormInput from "@/components/ui/custom/CustomInput";
@@ -29,7 +32,12 @@ export default function EmployeeForm({ onClose }: { onClose: () => void }) {
       group_ids: [],
     },
   });
+  const { permissions } = useSession();
+  const canAssignGroups = ["auth.view_group", "accounts.change_user"].every((permission) =>
+    permissions.includes(permission),
+  );
   const groups = useQuery({
+    enabled: canAssignGroups,
     queryKey: ["permission-groups"],
     queryFn: async () =>
       (await api.get<{ id: number; name: string }[]>("/permission-groups/")).data,
@@ -45,7 +53,12 @@ export default function EmployeeForm({ onClose }: { onClose: () => void }) {
   });
 
   return (
-    <CustomForm form={form} onSubmit={(values) => mutation.mutate(values)} className="space-y-4">
+    <CustomForm
+      busy={mutation.isPending}
+      form={form}
+      onSubmit={(values) => mutation.mutate(values)}
+      className="space-y-4"
+    >
       <FormInput
         form={form}
         name="display_name"
@@ -67,6 +80,9 @@ export default function EmployeeForm({ onClose }: { onClose: () => void }) {
         autoComplete="new-password"
         rules={{ required: t("Required") }}
       />
+      {canAssignGroups && groups.error && (
+        <AppErrorState message={errorMessage(groups.error)} onRetry={() => groups.refetch()} />
+      )}
       <Can permissions={["auth.view_group", "accounts.change_user"]} operator="and">
         <CustomSearchSelector
           form={form}
@@ -85,10 +101,14 @@ export default function EmployeeForm({ onClose }: { onClose: () => void }) {
         </div>
       ) : null}
       <div className="form-actions">
-        <Button type="button" variant="outline" onClick={onClose}>
-          {t("Cancel")}
+        <DialogClose asChild>
+          <Button type="button" variant="outline" disabled={mutation.isPending}>
+            {t("Cancel")}
+          </Button>
+        </DialogClose>
+        <Button disabled={mutation.isPending}>
+          {mutation.isPending ? t("Saving…") : t("Save")}
         </Button>
-        <Button disabled={mutation.isPending}>{t("Save")}</Button>
       </div>
     </CustomForm>
   );

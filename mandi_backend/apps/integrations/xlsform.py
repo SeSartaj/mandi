@@ -118,3 +118,70 @@ def add_establishment_question(filename, content):
     output = io.BytesIO()
     workbook.save(output)
     return output.getvalue(), xlsx_name
+
+
+def read_checklist_metadata(filename, content):
+    """Read checklist defaults without executing formulas or changing the file."""
+    from zipfile import BadZipFile
+
+    xlsx_content, _ = _as_xlsx(filename, content)
+    try:
+        workbook = load_workbook(io.BytesIO(xlsx_content), read_only=True, data_only=True)
+    except (BadZipFile, ValueError, OSError) as exc:
+        raise XlsFormError("Could not read the XLSForm workbook.") from exc
+    try:
+        if "survey" not in workbook.sheetnames:
+            raise XlsFormError("The XLSForm has no 'survey' sheet.")
+        metadata = {}
+        if "settings" in workbook.sheetnames:
+            rows = workbook["settings"].iter_rows(values_only=True)
+            headers = None
+            for row in rows:
+                if any(value is not None for value in row):
+                    headers = [str(value or "").strip().lower() for value in row]
+                    break
+            if headers:
+                for row in rows:
+                    if any(value is not None for value in row):
+                        metadata = {
+                            key: str(value).strip()
+                            for key, value in zip(headers, row)
+                            if key and value is not None
+                        }
+                        break
+        result = {
+            "name": metadata.get("form_title") or Path(filename).stem,
+            "code": metadata.get("form_id", ""),
+            "version": metadata.get("version", ""),
+        }
+        # Establishment type is a Mandi extension, not a standard XLSForm setting.
+        kind = metadata.get("establishment_kind", "").lower()
+        if kind in {"pharmacy", "wholesaler", "importer", "factory"}:
+            result["establishment_kind"] = kind
+        return result
+    finally:
+        workbook.close()
+
+
+def set_form_title(content, title):
+    """Set the deployment copy's title while preserving other form settings."""
+    workbook = load_workbook(io.BytesIO(content))
+    try:
+        sheet = workbook["settings"] if "settings" in workbook.sheetnames else workbook.create_sheet("settings")
+        header_row = next((row for row in range(1, sheet.max_row + 1)
+                           if any(cell.value is not None for cell in sheet[row])), 1)
+        title_column = next((cell.column for cell in sheet[header_row]
+                             if str(cell.value or "").strip().lower() == "form_title"), None)
+        if title_column is None:
+            title_column = sheet.max_column + 1 if any(cell.value is not None for cell in sheet[header_row]) else 1
+            sheet.cell(header_row, title_column, "form_title")
+        value_row = next((row for row in range(header_row + 1, sheet.max_row + 1)
+                          if any(cell.value is not None for cell in sheet[row])), header_row + 1)
+        cell = sheet.cell(value_row, title_column)
+        cell.value = title
+        cell.data_type = "s"
+        output = io.BytesIO()
+        workbook.save(output)
+        return output.getvalue()
+    finally:
+        workbook.close()

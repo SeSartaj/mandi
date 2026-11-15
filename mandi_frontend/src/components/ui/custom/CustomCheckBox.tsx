@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { FormField, FormLabel } from "@/components/ui/form";
+import { forwardRef, useId, type ReactNode, type ComponentPropsWithoutRef } from "react";
+import { FormField } from "@/components/ui/form";
 import type { UseFormReturn, Path, FieldValues } from "react-hook-form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -7,7 +7,10 @@ import { changeFieldValue, type ClearFieldItem } from "@/utils/form-utils";
 import { FormInputLayout, SimpleInputLayout } from "./InputLayout";
 
 // ===== Base Component (UI Logic) =====
-interface BaseCheckBoxProps {
+interface BaseCheckBoxProps extends Omit<
+  ComponentPropsWithoutRef<typeof Checkbox>,
+  "onCheckedChange"
+> {
   checked?: boolean | "indeterminate";
   onCheckedChange?: (checked: boolean) => void;
 
@@ -20,16 +23,23 @@ interface BaseCheckBoxProps {
   labelClassName?: string;
 }
 
-function BaseCheckBox({
-  checked,
-  onCheckedChange,
-  label,
-  description,
-  disabled,
-  hasError,
-  containerClassName,
-  labelClassName,
-}: BaseCheckBoxProps) {
+const BaseCheckBox = forwardRef<HTMLButtonElement, BaseCheckBoxProps>(function BaseCheckBox(
+  {
+    checked,
+    onCheckedChange,
+    label,
+    description,
+    disabled,
+    hasError,
+    containerClassName,
+    labelClassName,
+    id,
+    ...props
+  },
+  ref,
+) {
+  const generatedId = useId();
+  const checkboxId = id ?? generatedId;
   return (
     <div
       className={cn(
@@ -39,26 +49,22 @@ function BaseCheckBox({
       )}
     >
       <Checkbox
-        id={label as string}
+        {...props}
+        ref={ref}
+        id={checkboxId}
         checked={checked}
-        onCheckedChange={onCheckedChange}
+        onCheckedChange={(value) => onCheckedChange?.(value === true)}
         disabled={disabled}
       />
       <div className="space-y-1 leading-none">
         {label && (
           <label
-            htmlFor={label as string}
+            htmlFor={checkboxId}
             className={cn(
               "text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70 hover:cursor-pointer",
               hasError && "text-destructive",
               labelClassName,
             )}
-            onClick={(e) => {
-              console.log(e);
-              // Optional: Allow clicking label to toggle checkbox if not handled natively by ID
-              // But usually Shadcn FormLabel handles this or the wrapper structure.
-              // Keeping it simple as a div wrapper here.
-            }}
           >
             {label}
           </label>
@@ -67,7 +73,7 @@ function BaseCheckBox({
       </div>
     </div>
   );
-}
+});
 
 // ===== Form CheckBox (React Hook Form Wrapper) =====
 interface FormCheckBoxProps<T extends FieldValues> {
@@ -123,8 +129,11 @@ function FormCheckBox<T extends FieldValues>({
           <FormInputLayout>
             <BaseCheckBox
               checked={field.value}
+              ref={field.ref}
+              onBlur={field.onBlur}
               onCheckedChange={handleCheckedChange}
-              label={<FormLabel className={labelClassName}>{label}</FormLabel>}
+              label={label}
+              labelClassName={labelClassName}
               description={description}
               disabled={disabled}
               hasError={!!fieldState.error}

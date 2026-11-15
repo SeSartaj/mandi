@@ -2,6 +2,7 @@ import { Activity, Building2, Check, ClipboardCheck, ShieldCheck } from "lucide-
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
+import { Can } from "@/components/Can";
 import { AppErrorState } from "@/components/public/AppErrorState";
 import { AppLoader } from "@/components/public/AppLoader";
 import AppTitle from "@/components/public/AppTitle";
@@ -37,12 +38,14 @@ export default function DashboardPage() {
         title={t("Overview")}
         description={t("See which establishments have been inspected, and what needs attention.")}
         others={
-          <Link to="/establishments">
-            <Button variant="outline">
-              <Building2 />
-              {t("Establishments")}
+          <Can permission="establishments.view_establishment">
+            <Button variant="outline" asChild>
+              <Link to="/establishments">
+                <Building2 />
+                {t("Establishments")}
+              </Link>
             </Button>
-          </Link>
+          </Can>
         }
       />
 
@@ -53,7 +56,7 @@ export default function DashboardPage() {
               <span>{t(stat.label)}</span>
               <stat.icon size={20} />
             </div>
-            <strong>{stat.value.toString().padStart(2, "0")}</strong>
+            <strong>{stat.value.toLocaleString()}</strong>
           </Card>
         ))}
       </div>
@@ -99,7 +102,7 @@ export default function DashboardPage() {
             <h2>{t("Review queue")}</h2>
             <ClipboardCheck size={22} />
           </div>
-          <div className="queue-number">{coverage.unapproved.toString().padStart(2, "0")}</div>
+          <div className="queue-number">{coverage.unapproved.toLocaleString()}</div>
           <p>{t("Visits awaiting approval")}</p>
           <div className="queue-footer">
             <span>

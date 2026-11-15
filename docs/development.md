@@ -18,7 +18,7 @@ Choose your database password in `mandi_backend/.env`, then start the local Post
 docker compose --env-file mandi_backend/.env up -d postgres
 .venv/bin/python mandi_backend/manage.py migrate
 MANDI_DEMO_PASSWORD='choose-your-local-review-password' .venv/bin/python mandi_backend/manage.py seed_demo
-.venv/bin/python mandi_backend/manage.py runserver 127.0.0.1:8001
+.venv/bin/python mandi_backend/manage.py runserver 127.0.0.1:8000
 ```
 
 In another terminal:
@@ -28,9 +28,25 @@ npm --prefix mandi_frontend ci
 npm --prefix mandi_frontend run dev -- --host 127.0.0.1
 ```
 
-Open http://127.0.0.1:5174 and sign in as `reviewer`, using the password supplied to `seed_demo`. Existing account passwords are not reset when seeding again. The frontend API defaults to http://127.0.0.1:8001/api/v1; override it with `mandi_frontend/.env` if needed. The backend loads its `.env` automatically; process environment variables take precedence.
+Open http://127.0.0.1:5174 and sign in as `reviewer`, using the password supplied to `seed_demo`. Existing account passwords are not reset when seeding again. The frontend API defaults to `/api/v1` on the frontend origin. Vite proxies `/api` and `/media` to Django at `127.0.0.1:8000`, so browsers on other devices do not call their own localhost. Override `VITE_API_URL` in `mandi_frontend/.env` for a separate API host; production hosting must forward `/api` and `/media` to Django. The backend loads its `.env` automatically; process environment variables take precedence.
 
 Optional: omit `POSTGRES_DB` from the backend environment to use SQLite for a quick development review. PostgreSQL is required when `DJANGO_DEBUG=0`. No production deployment has been performed.
+
+## Database connection refused
+
+If `runserver` passes system checks but reports `connection refused` on
+`127.0.0.1:5433`, the local PostgreSQL service is stopped or unavailable.
+From the repository root, run:
+
+```bash
+docker compose --env-file mandi_backend/.env up -d --wait postgres
+.venv/bin/python mandi_backend/manage.py migrate --check
+```
+
+Compose needs `--env-file` because the database credentials live in the backend
+folder. Check `docker compose --env-file mandi_backend/.env ps -a` and, if the
+service fails to start, its `logs postgres`. Starting `runserver` does not start
+PostgreSQL. The Compose database uses host port `5433` and container port `5432`.
 
 ## Review walkthrough
 
@@ -48,10 +64,10 @@ Optional: omit `POSTGRES_DB` from the backend environment to use SQLite for a qu
 - `mandi_backend/apps/core/models.py`: `BaseModel` with `created_at`, `updated_at`, `created_by`, and `updated_by`; `Country`, `Province`, and `District` use it.
 - `mandi_backend/apps/*/services.py`: domain operations, authorization, transactions, reporting, and integration orchestration.
 - Models: persistence and database constraints. API serializers: input/output shape. API views: thin service calls.
-- `mandi_backend/config/api.py`: initial REST endpoints and serializers.
+- `mandi_backend/config/api/`: views grouped by domain (`accounts`, `establishments`, `inspections`, `checklists`, `submissions`, `reporting`), shared input/output serializers, and pagination/validation helpers. Views handle HTTP; domain rules and persistence stay in app services.
 - `mandi_frontend/src/features/*`: Mandi screens organized like the CMS features. Pages use the copied CMS `PageSection`, `AppTitle`, `AppTable`, `AppPagination`, `AppFilterPanel`, `AppErrorState`, `AppLoader`, `AppDialog`, form components, and calendar controls.
 - `mandi_frontend`: copied CMS build configuration, theme, fonts, dashboard layout/sidebar/header, shared UI/public component set, and supporting shared components, with Mandi screens and API/session adaptation.
-- Establishment, source-link, and inspection records are read-only in Django admin so changes cannot bypass services. Checklist add/edit (including XLSForm upload) and inspection add are available as service-backed admin forms; inspection approval remains in the application. `apps/core` provides countries, provinces, districts, and shared abstract model helpers. Account/group administration uses Django's built-in administration. Open `/admin/` on the backend port (`8001`) with a staff/superuser account; create one with `createsuperuser` if needed.
+- Establishment, source-link, and inspection records are read-only in Django admin so changes cannot bypass services. Checklist add/edit (including XLSForm upload) and inspection add are available as service-backed admin forms; inspection approval remains in the application. `apps/core` provides countries, provinces, districts, and shared abstract model helpers. Account/group administration uses Django's built-in administration. Open `/admin/` on the backend port (`8000`) with a staff/superuser account; create one with `createsuperuser` if needed.
 - New employees can be assigned predefined groups in their creation form by an authorized administrator. They are not automatically granted reviewer privileges.
 
 ## API contract
@@ -123,6 +139,31 @@ redeploys the asset through `/api/v2/assets/{uid}/deployment/`.
   **Sync from KoBo** button, the final score per submission, section score bars,
   the answered questions, an **Open in KoBo** link, and the raw submission JSON.
 
+## Browsing checklists and submissions
+
+- `GET /api/v1/checklists/{id}/` returns one checklist with `submission_count`.
+- `POST /api/v1/checklists/{id}/link-kobo/` with `{"asset_uid": "..."}` attaches
+  an **existing** KoBo project to a checklist. Projects created directly in KoBo
+  are not imported automatically; use this to adopt one so its submissions can
+  be synced. The UID cannot be linked to two checklists.
+- Deleting a Mandi checklist never deletes the KoBo project; the project stays
+  in KoBo and can be re-linked with the endpoint above.
+- `GET /api/v1/checklists/{id}/submissions/` lists the submissions of a single
+  checklist. Query parameters: `search` (establishment name or submission id),
+  `establishment_id`, `date_from`, `date_to`, plus `page` and `page_size`.
+- `GET /api/v1/kobo-submissions/{id}/` returns one submission with scores,
+  typed answers, attachments, and the KoBo link.
+- `GET /api/v1/kobo-submissions/{id}/attachments/{index}/` streams an uploaded
+  file from KoBo through the backend, so the browser never needs the KoBo API
+  token. Only KoBo hosts are accepted.
+- `form_schema` also stores `types`, `paths`, `groups`, and `order`, so answers
+  keep their form order and carry their section label and field type. Media
+  questions render the matched upload (`_attachments`) inline; geopoints link to
+  OpenStreetMap; other files appear as links.
+- UI routes: `/checklists/:id` (submission browser with search and filters) and
+  `/submissions/:id` (single submission with section scores, grouped answers,
+  files, and raw JSON).
+
 Restart the backend after changing KoBo environment variables.
 
 ## Integration boundary
@@ -174,3 +215,70 @@ The custom shell has been replaced with the actual AFDA CMS DashboardLayout, sid
 Copied shared components retain lint warnings present in their implementation (component exports, effect state updates, and a skeleton's random width); no lint errors are introduced.
 
 The follow-up adds the copied CMS calendar selector and custom form wrappers, predefined groups through migrations, and Can guards. Current verification: 24 backend tests and three frontend permission/calendar tests pass.
+
+### Checklist metadata from XLSForm
+
+When adding a checklist, select its XLSForm first. Mandi previews the workbook through
+`POST /api/v1/checklists/metadata/` and fills `name` from `settings.form_title`,
+`code` from `settings.form_id`, and `version` from `settings.version`. If no title
+is provided, it uses the filename without its extension. Missing code/version
+remain editable required fields. Manual edits and existing checklist details are
+preserved when a file is selected or replaced.
+
+An optional Mandi-specific `establishment_kind` column in the `settings` sheet
+can supply the type: `pharmacy`, `wholesaler`, `importer`, or `factory`. Standard
+XLSForms do not specify this business classification; when absent, select it
+manually. Previewing does not store a file or create a checklist. Both `.xlsx`
+and the existing LibreOffice-based `.xls` conversion are supported.
+
+### User accounts and checklist access
+
+In Django admin (`/admin/`), open **Accounts → Users → Add user** to create a
+login and password. Choose the appropriate Mandi role groups. Enable
+**Restrict checklist access** and select **Allowed checklists** to limit that
+user to specific forms. With the restriction enabled, an empty list grants no
+checklist access. Normal role permissions are still required; the allowlist does
+not grant editing, deployment, or administration rights. Superusers retain full
+access. Existing accounts remain unrestricted unless explicitly changed.
+
+Restrictions apply to checklist and inspection lists/details, related submissions
+and attachments, sync/deployment operations, and corresponding admin records.
+Coverage counts use the user's visible inspections. A restricted user who has
+permission to create a checklist automatically receives access to that new form.
+
+### Background audio playback
+
+AMR recordings are converted to MP3 for browser playback through the authenticated
+attachment endpoint using `?playback=1`. Install FFmpeg on the backend host (it is
+already available in the development environment). The original attachment is
+preserved and remains available through the endpoint without that parameter.
+Temporary audio files are removed after conversion; playback streams close when
+the response finishes.
+
+### Live Licensing connection
+
+The supplied API contract is saved in [licensing-api-reference.md](licensing-api-reference.md).
+Set `LICENSING_BASE_URL`, `LICENSING_REGISTRATION_API_KEY`, and optionally
+`LICENSING_TIMEOUT` in `mandi_backend/.env`. The development origin is currently
+`http://10.10.0.125:8001`; the development key is stored only in the ignored server
+environment. Restart the backend after changing environment settings.
+
+On an establishment detail page, use **Licensing → Connect** to search and page
+through applications, then select a record. Mandi maps importer → company,
+factory → factory, pharmacy → pharmacy, and wholesaler → wholesale. A live
+configured Licensing client takes precedence over demo integrations for this
+source; Survey and Archive retain their existing behavior.
+
+Source identities include category and exact application ID (`company:APP-123`)
+to avoid cross-category collisions. Connecting a record fetches its detail
+endpoint on demand and stores only a minimal business/location projection, not
+identity documents, applicant contacts, or the full upstream response. Existing
+Mandi source-link permissions are enforced. List requests remain paginated;
+the client also accepts a plain array response. No upstream pagination URLs
+are followed directly.
+
+Verification on 2026-11-10: mocked client/workflow checks cover categories,
+headers, pagination, null fields, detail lookup, and failure handling. Live calls
+at `http://10.10.0.125:8001` succeeded for all four category lists. Company and
+Factory detail lookups also succeeded. Pharmacy and Wholesale lists were empty,
+so their live detail endpoints could not be checked with an existing record.

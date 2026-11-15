@@ -7,9 +7,11 @@ export function useApiQuery<T>(
   key: readonly unknown[],
   url: string,
   params: Record<string, unknown> = {},
+  options: { enabled?: boolean } = {},
 ) {
   return useQuery({
+    enabled: options.enabled,
     queryKey: [...key, params],
-    queryFn: async () => (await api.get<T>(url, { params })).data,
+    queryFn: async ({ signal }) => (await api.get<T>(url, { params, signal })).data,
   });
 }

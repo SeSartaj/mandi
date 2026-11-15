@@ -15,7 +15,7 @@ export function AppErrorState({ message, onRetry, className }: AppErrorStateProp
   const tCommon = useTranslations("Common");
 
   return (
-    <Card className={className ?? "border-destructive/30 bg-card shadow-sm"}>
+    <Card role="alert" className={className ?? "border-destructive/30 bg-card shadow-sm"}>
       <CardContent className="flex flex-col items-center justify-center gap-3 p-10 text-center">
         <div className="bg-destructive/10 text-destructive flex size-14 items-center justify-center rounded-full">
           <AlertTriangle className="size-6" />

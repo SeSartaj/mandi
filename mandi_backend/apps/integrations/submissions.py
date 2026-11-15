@@ -1,3 +1,4 @@
+import mimetypes
 """Helpers that turn raw KoBo submissions into displayable inspection data."""
 
 import re
@@ -23,6 +24,9 @@ META_KEYS = {
     "today",
     "instanceID",
     "uuid",
+    "rootUuid",
+    "__version__",
+    "_version",
     # The linkage key for the establishment itself; shown on the page header.
     "establishment_id",
 }
@@ -71,6 +75,9 @@ def normalize(data):
     """Return the submission keyed by question name, in form order."""
     normalized = {}
     for key, value in (data or {}).items():
+        # ``meta/`` and ``formhub/`` hold KoBo bookkeeping, never answers.
+        if str(key).startswith(("meta/", "formhub/")):
+            continue
         name = leaf_name(key)
         if name:
             normalized[name] = value
@@ -88,7 +95,12 @@ def first_label(value):
 
 
 def form_schema(asset):
-    """Return ``{"labels": {name: label}, "choices": {name: {value: label}}}``."""
+    """Describe the deployed form.
+
+    Returns ``labels`` (question name to label), ``choices`` (question name to
+    ``{choice value: label}``), ``types`` (question name to XLSForm type),
+    ``paths`` (question name to KoBo path) and ``groups`` (group name to label).
+    """
     content = (asset or {}).get("content") or {}
     survey = content.get("survey") or []
     choices = content.get("choices") or []
@@ -104,23 +116,110 @@ def form_schema(asset):
 
     labels = {}
     choice_labels = {}
+    node_types = {}
+    paths = {}
+    groups = {}
+    order = []
     for node in survey:
         name = node.get("name")
         if not name:
             continue
+        node_type = str(node.get("type") or "")
+        if node_type in ("begin_group", "begin_repeat"):
+            groups[name] = first_label(node.get("label"))
+            continue
+        if node_type in ("end_group", "end_repeat"):
+            continue
+
+        order.append(name)
         labels[name] = first_label(node.get("label"))
+        node_types[name] = node_type
+        path = node.get("$xpath")
+        if path:
+            paths[name] = str(path).split(" ")[0]
+
         # KoBo stores deployed selects as ``type: select_one`` plus
         # ``select_from_list_name``; XLSForms use ``select_one <list>``.
         list_name = node.get("select_from_list_name") or ""
         if not list_name:
-            node_type = str(node.get("type") or "")
             for prefix in ("select_one ", "select_multiple "):
                 if node_type.startswith(prefix):
                     list_name = node_type[len(prefix) :].strip()
                     break
         if list_name in labelled_choices:
             choice_labels[name] = labelled_choices[list_name]
-    return {"labels": labels, "choices": choice_labels}
+    return {
+        "labels": labels,
+        "choices": choice_labels,
+        "types": node_types,
+        "paths": paths,
+        "groups": groups,
+        "order": order,
+    }
+
+
+def group_name(path):
+    """Return the parent group/repeat name for a KoBo question path."""
+    parts = [part for part in str(path or "").split("/") if part]
+    return _REPEAT_INDEX.sub("", parts[-2]) if len(parts) > 1 else ""
+
+
+_MEDIA_KINDS = (("image/", "image"), ("audio/", "audio"), ("video/", "video"))
+
+
+def media_kind(mimetype):
+    value = (mimetype or "").lower()
+    for prefix, kind in _MEDIA_KINDS:
+        if value.startswith(prefix):
+            return kind
+    if "pdf" in value:
+        return "pdf"
+    return "file"
+
+
+def submission_attachments(data):
+    """List the uploaded files of a submission, in ``_attachments`` order."""
+    attachments = []
+    for item in (data or {}).get("_attachments") or []:
+        if not isinstance(item, dict):
+            continue
+        filename = item.get("filename") or item.get("media_file_basename") or ""
+        if not filename:
+            continue
+        attachments.append(
+            {
+                "index": len(attachments),
+                "filename": filename,
+                "basename": str(filename).rsplit("/", 1)[-1],
+                "mimetype": item.get("mimetype") or mimetypes.guess_type(filename)[0] or "",
+                "kind": media_kind(item.get("mimetype") or mimetypes.guess_type(filename)[0]),
+                "download_url": item.get("download_url")
+                or item.get("download_medium_url")
+                or item.get("download_large_url")
+                or "",
+            }
+        )
+    return attachments
+
+
+def _answer_media(value, attachments):
+    """Match the media filenames recorded as an answer to the uploads list."""
+    if not attachments or isinstance(value, (dict, list)) or value is None:
+        return []
+    tokens = set(str(value).split())
+    matched = []
+    for attachment in attachments:
+        if attachment["filename"] in tokens or attachment["basename"] in tokens:
+            matched.append(
+                {
+                    "index": attachment["index"],
+                    "filename": attachment["basename"],
+                    "mimetype": attachment["mimetype"],
+                    "kind": attachment["kind"],
+                    "url": None,
+                }
+            )
+    return matched
 
 
 def _as_float(value):
@@ -206,6 +305,15 @@ def _display_value(name, value, schema):
         return "—"
     if isinstance(value, bool):
         return "بلی" if value else "نخیر"
+    node_type = (schema.get("types") or {}).get(name, "")
+    if node_type == "geopoint":
+        if isinstance(value, list) and len(value) >= 2:
+            return f"{value[0]}, {value[1]}"
+        parts = str(value).split()
+        if len(parts) >= 2:
+            return f"{parts[0]}, {parts[1]}"
+    if node_type == "time" and isinstance(value, str):
+        return value.split(".")[0][:5]
     choices = (schema.get("choices") or {}).get(name) or {}
     if choices:
         parts = str(value).split(" ")
@@ -219,15 +327,21 @@ def _display_value(name, value, schema):
 
 
 def submission_answers(data, schema):
-    """Return the answered questions as ``{name, label, value, display}`` rows."""
-    data = normalize(data)
+    """Return the answered questions as labelled rows with type and media."""
+    raw = data or {}
+    data = normalize(raw)
     schema = schema or {}
     labels = schema.get("labels") or {}
-    ordered = [name for name in labels if name in data]
+    types = schema.get("types") or {}
+    paths = schema.get("paths") or {}
+    groups = schema.get("groups") or {}
+    attachments = submission_attachments(raw)
+    form_order = schema.get("order") or list(labels)
+    ordered = [name for name in form_order if name in data]
     ordered += [
         name
         for name in data
-        if name not in labels and not _is_internal(name)
+        if name not in form_order and not _is_internal(name)
     ]
 
     answers = []
@@ -237,12 +351,16 @@ def submission_answers(data, schema):
         value = data.get(name)
         if value in (None, "", [], {}):
             continue
+        group = groups.get(group_name(paths.get(name, "")))
         answers.append(
             {
                 "name": name,
                 "label": labels.get(name) or _humanize(name),
                 "value": value,
                 "display": _display_value(name, value, schema),
+                "type": types.get(name, ""),
+                "group": group or "",
+                "media": _answer_media(value, attachments),
             }
         )
     return answers

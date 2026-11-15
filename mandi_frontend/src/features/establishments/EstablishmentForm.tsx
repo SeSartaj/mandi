@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
+import { DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import CustomForm from "@/components/ui/custom/CustomForm";
 import FormInput from "@/components/ui/custom/CustomInput";
@@ -47,7 +48,12 @@ export default function EstablishmentForm({
   });
 
   return (
-    <CustomForm form={form} onSubmit={(values) => mutation.mutate(values)} className="space-y-4">
+    <CustomForm
+      busy={mutation.isPending}
+      form={form}
+      onSubmit={(values) => mutation.mutate(values)}
+      className="space-y-4"
+    >
       <div className="form-grid">
         <FormInput
           form={form}
@@ -83,10 +89,14 @@ export default function EstablishmentForm({
         </div>
       ) : null}
       <div className="form-actions">
-        <Button type="button" variant="outline" onClick={onClose}>
-          {t("Cancel")}
+        <DialogClose asChild>
+          <Button type="button" variant="outline" disabled={mutation.isPending}>
+            {t("Cancel")}
+          </Button>
+        </DialogClose>
+        <Button disabled={mutation.isPending}>
+          {mutation.isPending ? t("Saving…") : t("Save")}
         </Button>
-        <Button disabled={mutation.isPending}>{t("Save")}</Button>
       </div>
     </CustomForm>
   );

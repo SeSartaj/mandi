@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
@@ -12,6 +12,9 @@ import FormSelect from "@/components/ui/custom/CustomSelect";
 import { CustomSearchSelector } from "@/components/ui/custom/CustomSearchSelector";
 import { choiceLabel, establishmentKinds, inspectionKinds } from "@/features/shared/labels";
 import { useSystemCalendar } from "@/hooks/use-system-calendar";
+import { Can } from "@/components/Can";
+import { useSession } from "@/lib/session";
+import { validDateRange } from "./filter-state";
 import { api } from "@/lib/api";
 import type { Employee, Page } from "@/lib/api";
 
@@ -41,23 +44,29 @@ const fieldLabels: Record<string, string> = {
 
 export function InspectionFilters({
   onApply,
-  initial = {},
+  initial = emptyFilters,
 }: {
   onApply: (values: InspectionFilterValues) => void;
   initial?: InspectionFilterValues;
 }) {
   const { t } = useTranslation();
   const calendar = useSystemCalendar();
-  const [active, setActive] = useState<InspectionFilterValues>(initial);
+  const active = initial;
   const form = useForm<InspectionFilterValues>({
     defaultValues: { ...emptyFilters, ...initial },
   });
+  useEffect(() => {
+    form.reset({ ...emptyFilters, ...initial });
+  }, [form, initial]);
+  const { permissions } = useSession();
   const employees = useQuery({
+    enabled: permissions.includes("accounts.view_user"),
     queryKey: ["form-employees"],
     queryFn: async () =>
       (await api.get<Page<Employee>>("/employees/", { params: { page_size: 100 } })).data,
   });
   const checklists = useQuery({
+    enabled: permissions.includes("inspections.view_checklist"),
     queryKey: ["form-checklists"],
     queryFn: async () =>
       (await api.get<{ id: number; name: string; version: string }[]>("/checklists/")).data,
@@ -71,6 +80,14 @@ export function InspectionFilters({
   const displayValue = (key: string, value: string) => {
     if (key === "kind" || key === "establishment_kind") return t(choiceLabel(value));
     if (key === "approved") return t(value === "true" ? "Approved" : "Unapproved");
+    if (key === "inspector_id")
+      return (
+        employees.data?.results.find((item) => String(item.id) === value)?.display_name ||
+        employees.data?.results.find((item) => String(item.id) === value)?.username ||
+        value
+      );
+    if (key === "checklist_id")
+      return checklists.data?.find((item) => String(item.id) === value)?.name || value;
     return value;
   };
 
@@ -83,18 +100,20 @@ export function InspectionFilters({
     }));
 
   const submit = (values: InspectionFilterValues) => {
+    if (!validDateRange(values.date_from, values.date_to)) {
+      form.setError("date_to", { message: t("End date must be on or after start date.") });
+      return;
+    }
     const cleaned = Object.fromEntries(
       Object.entries(values)
         .map(([key, value]) => [key, value === "__all__" ? "" : value])
         .filter(([, value]) => value !== ""),
     );
-    setActive(cleaned);
     onApply(cleaned);
   };
 
   const reset = () => {
     form.reset(emptyFilters);
-    setActive({});
     onApply({});
   };
 
@@ -105,12 +124,15 @@ export function InspectionFilters({
         const next = { ...active };
         delete next[key];
         form.setValue(key, emptyFilters[key] ?? "");
-        setActive(next);
         onApply(next);
       }}
       onClearAll={reset}
     >
-      <CustomForm form={form} onSubmit={submit} className="flex w-full flex-wrap items-end gap-3">
+      <CustomForm
+        form={form}
+        onSubmit={submit}
+        className="grid w-full grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-4"
+      >
         <FormDatePicker
           form={form}
           name="date_from"
@@ -155,26 +177,30 @@ export function InspectionFilters({
           )}
         />
         <FormInput form={form} name="province" label={t("Province")} />
-        <CustomSearchSelector
-          form={form}
-          name="inspector_id"
-          label={t("Inspector")}
-          placeholder={t("All inspectors")}
-          items={(employees.data?.results || []).map((employee) => ({
-            value: String(employee.id),
-            label: employee.display_name || employee.username,
-          }))}
-        />
-        <CustomSearchSelector
-          form={form}
-          name="checklist_id"
-          label={t("Checklist")}
-          placeholder={t("All checklists")}
-          items={(checklists.data || []).map((checklist) => ({
-            value: String(checklist.id),
-            label: `${checklist.name} · ${checklist.version}`,
-          }))}
-        />
+        <Can permission="accounts.view_user">
+          <CustomSearchSelector
+            form={form}
+            name="inspector_id"
+            label={t("Inspector")}
+            placeholder={t("All inspectors")}
+            items={(employees.data?.results || []).map((employee) => ({
+              value: String(employee.id),
+              label: employee.display_name || employee.username,
+            }))}
+          />
+        </Can>
+        <Can permission="inspections.view_checklist">
+          <CustomSearchSelector
+            form={form}
+            name="checklist_id"
+            label={t("Checklist")}
+            placeholder={t("All checklists")}
+            items={(checklists.data || []).map((checklist) => ({
+              value: String(checklist.id),
+              label: `${checklist.name} · ${checklist.version}`,
+            }))}
+          />
+        </Can>
         <Button>{t("Apply filters")}</Button>
         <Button type="button" variant="outline" onClick={reset}>
           {t("Reset")}

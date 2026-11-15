@@ -8,7 +8,15 @@ import packageJson from './package.json' with { type: 'json' }
 
 // https://vite.dev/config/
 export default defineConfig({
-  server: { host: true, port: 5174, strictPort: true },
+  server: {
+    host: true,
+    port: 5174,
+    strictPort: true,
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/media': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+    },
+  },
   plugins: [
     react(),
     // These ESM-capable browsers need both syntax lowering and runtime APIs.

@@ -41,11 +41,11 @@ export function AppSelect({
     <Select
       {...selectProps}
       onValueChange={(val) => {
-        const parsed = isNaN(Number(val)) ? val : Number(val);
-        onChange(parsed);
+        const option = options.find((item) => String(item.value) === val);
+        onChange(option?.value ?? val);
       }}
     >
-      <SelectTrigger className={cn(width || "w-45", className)}>
+      <SelectTrigger aria-label={label} className={cn(width || "w-45", className)}>
         <SelectValue placeholder={label} />
       </SelectTrigger>
 

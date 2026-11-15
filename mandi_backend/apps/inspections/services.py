@@ -1,13 +1,14 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Count
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
 
-from apps.accounts.services import require
+from apps.accounts.services import require, scope_checklists, require_checklist_access
 from apps.establishments.models import Establishment
 from apps.establishments.services import establishment_choice_csv
-from apps.integrations.kobo import KoboError, deploy_checklist_to_kobo
+from apps.integrations.kobo import KoboError, deploy_checklist_to_kobo, get_asset
 
 from .models import Checklist, Inspection
 
@@ -17,6 +18,7 @@ def list_inspections(actor, filters):
     qs = Inspection.objects.select_related(
         "establishment", "checklist", "approved_by"
     ).prefetch_related("team")
+    qs = scope_checklists(actor, qs, "checklist_id")
     for field in ("establishment_id", "kind", "checklist_id"):
         if filters.get(field):
             qs = qs.filter(**{field: filters[field]})
@@ -46,13 +48,17 @@ def get_inspection(actor, pk):
 
 def list_checklists(actor):
     require(actor, "inspections.view_checklist")
-    return Checklist.objects.order_by("name", "version")
+    return scope_checklists(actor, Checklist.objects.all()).annotate(
+        submission_count=Count("kobo_submissions")
+    ).order_by("name", "version")
 
 
 def get_checklist(actor, pk):
     require(actor, "inspections.view_checklist")
     try:
-        return Checklist.objects.get(pk=pk)
+        return scope_checklists(actor, Checklist.objects.all()).annotate(
+            submission_count=Count("kobo_submissions")
+        ).get(pk=pk)
     except Checklist.DoesNotExist as exc:
         raise NotFound("Checklist not found.") from exc
 
@@ -63,9 +69,12 @@ def save_checklist(actor, data, pk=None):
         actor,
         "inspections.change_checklist" if pk else "inspections.add_checklist",
     )
-    obj = Checklist.objects.get(pk=pk) if pk else Checklist()
+    if pk:
+        require_checklist_access(actor, pk)
+    obj = get_checklist(actor, pk) if pk else Checklist()
     for field in ("code", "name", "version", "establishment_kind"):
-        setattr(obj, field, data[field])
+        if field in data:
+            setattr(obj, field, data[field])
     if not pk:
         obj.created_by = actor
     obj.updated_by = actor
@@ -79,12 +88,66 @@ def save_checklist(actor, data, pk=None):
     except DjangoValidationError as exc:
         raise ValidationError(exc.messages) from exc
     obj.save()
+    if not pk and actor.restrict_checklist_access:
+        actor.allowed_checklists.add(obj)
     return obj
+
+
+def link_kobo_asset(actor, pk, asset_uid):
+    """Attach an existing KoBo project to a checklist so its data can be synced.
+
+    Projects created directly in KoBo are unknown to Mandi; this lets an
+    administrator adopt one instead of redeploying the XLSForm.
+    """
+    require(actor, "inspections.change_checklist")
+    checklist = get_checklist(actor, pk)
+    asset_uid = (asset_uid or "").strip()
+    if not asset_uid:
+        raise ValidationError({"asset_uid": "Enter the KoBo project UID."})
+    if (
+        Checklist.objects.filter(kobo_asset_uid=asset_uid)
+        .exclude(pk=checklist.pk)
+        .exists()
+    ):
+        raise ValidationError(
+            {"asset_uid": "That KoBo project is already linked to another checklist."}
+        )
+    try:
+        asset = get_asset(asset_uid)
+    except KoboError as exc:
+        raise ValidationError({"kobo": str(exc)}) from exc
+    if not asset:
+        raise ValidationError({"asset_uid": "No KoBo project found with that UID."})
+
+    deployed = asset.get("deployment_status") == "deployed"
+    checklist.kobo_asset_uid = asset_uid
+    checklist.kobo_deployment_status = (
+        Checklist.DeploymentStatus.DEPLOYED
+        if deployed
+        else Checklist.DeploymentStatus.NOT_DEPLOYED
+    )
+    checklist.kobo_deployment_error = ""
+    checklist.kobo_deployed_at = timezone.now() if deployed else None
+    checklist.kobo_deployed_by = actor
+    checklist.updated_by = actor
+    checklist.save(
+        update_fields=[
+            "kobo_asset_uid",
+            "kobo_deployment_status",
+            "kobo_deployment_error",
+            "kobo_deployed_at",
+            "kobo_deployed_by",
+            "updated_by",
+            "updated_at",
+        ]
+    )
+    return checklist
 
 
 def deploy_checklist(actor, pk):
     """Upload the XLSForm to KoBo and deploy it as a survey."""
     require(actor, "inspections.deploy_checklist")
+    require_checklist_access(actor, pk)
     try:
         checklist = Checklist.objects.get(pk=pk)
     except Checklist.DoesNotExist as exc:
@@ -104,7 +167,7 @@ def deploy_checklist(actor, pk):
     )
 
     try:
-        asset_uid, asset = deploy_checklist_to_kobo(
+        asset_uid, _asset = deploy_checklist_to_kobo(
             checklist,
             establishments_csv=establishment_choice_csv(),
         )
@@ -162,6 +225,7 @@ def create_manual_inspection(
 ):
     """Service-backed creation used by the admin add form."""
     require(actor, "inspections.add_inspection")
+    require_checklist_access(actor, checklist.pk)
     if checklist.establishment_kind != establishment.kind:
         raise ValidationError("Checklist is not applicable to this establishment type.")
     team = list(team)
@@ -196,6 +260,7 @@ def approve_inspection(actor, pk):
         obj = Inspection.objects.select_for_update().get(pk=pk)
     except Inspection.DoesNotExist as exc:
         raise NotFound("Inspection not found.") from exc
+    require_checklist_access(actor, obj.checklist_id)
     if not obj.approved:
         obj.approved, obj.approved_by, obj.approved_at = True, actor, timezone.now()
         obj.save(update_fields=["approved", "approved_by", "approved_at"])
@@ -219,6 +284,7 @@ def ingest_inspection(actor, data):
         checklist = Checklist.objects.get(pk=values.pop("checklist_id"))
     except (Establishment.DoesNotExist, Checklist.DoesNotExist) as exc:
         raise ValidationError("Unknown establishment or checklist.") from exc
+    require_checklist_access(actor, checklist.pk)
     if checklist.establishment_kind != establishment.kind:
         raise ValidationError("Checklist is not applicable to this establishment type.")
     team = list(get_user_model().objects.filter(pk__in=team_ids, is_active=True))

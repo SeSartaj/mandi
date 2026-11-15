@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 
+import { useSession } from "@/lib/session";
 import { Can } from "@/components/Can";
 import { PageSection } from "@/components/PageSection";
 import { AppDialog } from "@/components/public/AppDialog";
@@ -78,6 +79,7 @@ export default function EstablishmentDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams();
   const client = useQueryClient();
+  const { permissions } = useSession();
   const [edit, setEdit] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useTablePageSize();
@@ -85,11 +87,16 @@ export default function EstablishmentDetailPage() {
   const [koboPageSize, setKoboPageSize] = useTablePageSize();
   const [selectedSubmission, setSelectedSubmission] = useState<KoboSubmission | null>(null);
   const data = useApiQuery<Establishment>(["establishment", id], `/establishments/${id}/`);
-  const visits = useApiQuery<Page<Inspection>>(["establishment-inspections", id], "/inspections/", {
-    establishment_id: id,
-    page,
-    page_size: pageSize,
-  });
+  const visits = useApiQuery<Page<Inspection>>(
+    ["establishment-inspections", id],
+    "/inspections/",
+    {
+      establishment_id: id,
+      page,
+      page_size: pageSize,
+    },
+    { enabled: permissions.includes("inspections.view_inspection") },
+  );
   const koboSubmissions = useApiQuery<Page<KoboSubmission>>(
     ["kobo-submissions", id],
     `/establishments/${id}/kobo-submissions/`,
@@ -140,32 +147,39 @@ export default function EstablishmentDetailPage() {
         </dl>
       </PageSection>
 
-      <h2 className="section-title">{t("Source systems")}</h2>
-      <div className="source-grid">
-        {[
-          ["survey", "Survey system"],
-          ["archive", "Archive system"],
-          ["licensing", "Licensing system"],
-        ].map(([source, title]) => (
-          <SourcePanel key={source} establishment={establishment} source={source} title={title} />
-        ))}
-      </div>
-
-      <InspectionTable
-        title={t("Inspection history")}
-        rows={visits.data?.results ?? []}
-        loading={visits.isPending}
-        page={page}
-        pageSize={pageSize}
-        totalItems={visitCount}
-        totalPages={pageCount(visitCount, pageSize)}
-        onPageChange={setPage}
-        onPageSizeChange={(size) => {
-          setPageSize(size);
-          setPage(1);
-        }}
-        emptyMessage={t("No inspections in this selection.")}
-      />
+      <Can permission="establishments.view_sourcelink">
+        <h2 className="section-title">{t("Source systems")}</h2>
+        <div className="source-grid">
+          {[
+            ["survey", "Survey system"],
+            ["archive", "Archive system"],
+            ["licensing", "Licensing system"],
+          ].map(([source, title]) => (
+            <SourcePanel key={source} establishment={establishment} source={source} title={title} />
+          ))}
+        </div>
+      </Can>
+      <Can permission="inspections.view_inspection">
+        {visits.error ? (
+          <AppErrorState message={errorMessage(visits.error)} onRetry={() => visits.refetch()} />
+        ) : (
+          <InspectionTable
+            title={t("Inspection history")}
+            rows={visits.data?.results ?? []}
+            loading={visits.isPending}
+            page={page}
+            pageSize={pageSize}
+            totalItems={visitCount}
+            totalPages={pageCount(visitCount, pageSize)}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+            emptyMessage={t("No inspections in this selection.")}
+          />
+        )}
+      </Can>
 
       <PageSection
         title={t("KoBo inspections")}

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import requests
 from django.conf import settings
 
-from .xlsform import XlsFormError, add_establishment_question
+from .xlsform import XlsFormError, add_establishment_question, set_form_title
 
 
 class KoboError(Exception):
@@ -172,6 +172,42 @@ def fetch_submissions(asset_uid):
     return submissions
 
 
+def _kobo_host():
+    host = settings.KOBO_HOST_HEADER or settings.KOBO_BASE_URL
+    return (host or "").split("://")[-1].split("/")[0].lower()
+
+
+def open_attachment(download_url):
+    """Stream an uploaded submission attachment from KoBo.
+
+    KoBo returns absolute URLs pointing at the public host, which the backend
+    reaches through ``KOBO_BASE_URL`` with the ``Host`` header set, so only the
+    path and query are reused.
+    """
+    if not download_url:
+        raise KoboError("This attachment has no KoBo download URL.")
+    parsed = urlparse(download_url)
+    allowed = {_kobo_host()}
+    base_host = urlparse(settings.KOBO_BASE_URL or "").hostname or ""
+    allowed.add(base_host.lower())
+    if parsed.netloc and parsed.netloc.split(":")[0].lower() not in allowed:
+        raise KoboError("Attachment URL is not a KoBo URL.")
+    path = parsed.path + (f"?{parsed.query}" if parsed.query else "")
+    try:
+        response = requests.get(
+            _url(path),
+            headers=_headers(),
+            verify=settings.KOBO_VERIFY_TLS,
+            timeout=settings.KOBO_TIMEOUT,
+            stream=True,
+        )
+    except requests.RequestException as exc:
+        raise KoboError(f"Cannot reach KoBo: {exc}") from exc
+    if not response.ok:
+        raise KoboError(_error_message(response))
+    return response
+
+
 def deploy_checklist_to_kobo(checklist, establishments_csv=None):
     """Import the checklist XLSForm and deploy it as a KoBo survey."""
     if not checklist.xlsform:
@@ -187,6 +223,7 @@ def deploy_checklist_to_kobo(checklist, establishments_csv=None):
             xlsform_content, xlsform_name = add_establishment_question(
                 filename, file_handle.read()
             )
+            xlsform_content = set_form_title(xlsform_content, checklist.name)
         except XlsFormError as exc:
             raise KoboError(str(exc)) from exc
 
@@ -227,6 +264,9 @@ def deploy_checklist_to_kobo(checklist, establishments_csv=None):
             destination=_public_asset_url(asset_uid),
         )
 
+    # Importers can derive the asset name from workbook content. Apply the saved
+    # Mandi name after all imports, for both new and existing projects.
+    _request("PATCH", f"/api/v2/assets/{asset_uid}/", json={"name": checklist.name})
     asset = get_asset(asset_uid)
     if not asset:
         raise KoboError("KoBo created the import but the asset could not be loaded.")

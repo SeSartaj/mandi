@@ -54,7 +54,17 @@ class FormSchemaTests(SimpleTestCase):
         self.assertEqual(schema["choices"]["q2_1"]["1"], "۱ – تکمیل")
 
     def test_missing_asset_returns_empty_schema(self):
-        self.assertEqual(form_schema(None), {"labels": {}, "choices": {}})
+        self.assertEqual(
+            form_schema(None),
+            {
+                "labels": {},
+                "choices": {},
+                "types": {},
+                "paths": {},
+                "groups": {},
+                "order": [],
+            },
+        )
 
     def test_deployed_select_nodes_use_select_from_list_name(self):
         asset = {

@@ -57,6 +57,7 @@ export function RadioCardItem({
         "data-[state=checked]:border-ring data-[state=checked]:ring-ring/50 data-[state=checked]:ring-1",
         hasError && "border-destructive data-[state=checked]:border-destructive",
         disabled && "cursor-not-allowed opacity-70",
+        containerClassName,
         className,
       )}
       {...props}

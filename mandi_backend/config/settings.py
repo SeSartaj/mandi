@@ -120,3 +120,8 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+
+# Licensing credentials stay on the backend.
+LICENSING_BASE_URL = os.getenv("LICENSING_BASE_URL", "")
+LICENSING_REGISTRATION_API_KEY = os.getenv("LICENSING_REGISTRATION_API_KEY", "")
+LICENSING_TIMEOUT = float(os.getenv("LICENSING_TIMEOUT", "15"))

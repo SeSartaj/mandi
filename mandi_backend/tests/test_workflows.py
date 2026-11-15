@@ -26,7 +26,7 @@ from apps.inspections.services import (
 from apps.reporting.services import coverage
 
 
-@override_settings(DEMO_INTEGRATIONS=True)
+@override_settings(DEMO_INTEGRATIONS=True, LICENSING_BASE_URL="")
 class WorkflowTests(TestCase):
     def setUp(self):
         self.manager = get_user_model().objects.create_user(

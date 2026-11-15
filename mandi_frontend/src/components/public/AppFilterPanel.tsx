@@ -92,13 +92,14 @@ export default function AppFilterPanel({
     <Button
       type="button"
       variant={isOpen ? "secondary" : "outline"}
-      size="icon-sm"
+      size="sm"
       aria-expanded={isOpen}
       aria-controls={contentId}
       aria-label={advancedLabel ?? t("label")}
       className="relative"
     >
       <SlidersHorizontal className="size-3.5" aria-hidden="true" />
+      <span>{advancedLabel ?? t("label")}</span>
       {hasActiveFilters && (
         <span className="bg-primary text-primary-foreground absolute -end-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px]">
           {activeFilters.length}

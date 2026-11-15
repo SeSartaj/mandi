@@ -1,28 +1,59 @@
 import axios from "axios";
+import i18next from "i18next";
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:8001/api/v1",
+  baseURL: import.meta.env.VITE_API_URL || "/api/v1",
 });
 api.interceptors.request.use((config) => {
   const token = sessionStorage.getItem("mandi-token");
   if (token) config.headers.Authorization = `Token ${token}`;
   return config;
 });
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const token = sessionStorage.getItem("mandi-token");
+    if (
+      axios.isAxiosError(error) &&
+      error.response?.status === 401 &&
+      token &&
+      error.config?.headers.Authorization === `Token ${token}`
+    ) {
+      sessionStorage.removeItem("mandi-token");
+      window.dispatchEvent(new Event("mandi-session-expired"));
+    }
+    return Promise.reject(error);
+  },
+);
+
 export function errorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    if (!error.response) return "Cannot reach Mandi. Check that the backend is running.";
+    if (!error.response)
+      return i18next.t("Cannot reach Mandi. Check your connection and try again.");
+    if (error.response.status >= 500)
+      return i18next.t("Mandi is temporarily unavailable. Please try again shortly.");
+    if (error.response.status === 404)
+      return i18next.t("This record could not be found. It may have been removed.");
     const data = error.response.data;
     if (typeof data?.detail === "string") return data.detail;
-    if (data && typeof data === "object")
-      return Object.entries(data)
-        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`)
-        .join(" · ");
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      const messages = Object.entries(data).flatMap(([key, value]) => {
+        const items = Array.isArray(value) ? value : [value];
+        const text = items.filter((item) => typeof item === "string").join(", ");
+        if (!text) return [];
+        return key === "non_field_errors"
+          ? [text]
+          : [`${i18next.t(key.replaceAll("_", " "))}: ${text}`];
+      });
+      if (messages.length) return messages.join(" · ");
+    }
   }
-  return "Something went wrong. Please try again.";
+  return i18next.t("Something went wrong. Please try again.");
 }
+
 export function fileUrl(path: string | null | undefined): string {
   if (!path) return "";
   try {
-    return new URL(path, api.defaults.baseURL ?? window.location.origin).toString();
+    return new URL(path, new URL(api.defaults.baseURL ?? "/", window.location.origin)).toString();
   } catch {
     return path;
   }
@@ -98,6 +129,7 @@ export type Checklist = {
   kobo_deployment_status: "not_deployed" | "deploying" | "deployed" | "failed";
   kobo_deployment_error: string;
   kobo_deployed_at: string | null;
+  submission_count?: number;
   created_at: string;
   updated_at: string;
 };
@@ -114,22 +146,44 @@ export type KoboSubmissionScores = {
   max: number | null;
   percent: number | null;
 };
+export type KoboAnswerMedia = {
+  index: number;
+  filename: string;
+  mimetype: string;
+  kind: KoboMediaKind;
+  url: string | null;
+};
+export type KoboMediaKind = "image" | "audio" | "video" | "pdf" | "file";
+export type KoboAttachment = {
+  index: number;
+  filename: string;
+  basename: string;
+  mimetype: string;
+  kind: KoboMediaKind;
+  url: string;
+};
 export type KoboAnswer = {
   name: string;
   label: string;
   value: unknown;
   display: string;
+  type: string;
+  group: string;
+  media: KoboAnswerMedia[];
 };
 export type KoboSubmission = {
   id: number;
   asset_uid: string;
   submission_id: string;
   establishment_id: string;
+  establishment_name: string | null;
+  checklist_id: number | null;
   checklist_name: string | null;
   checklist_version: string | null;
   submitted_at: string | null;
   scores: KoboSubmissionScores;
   answers: KoboAnswer[];
+  attachments: KoboAttachment[];
   kobo_url: string | null;
   data: Record<string, unknown>;
 };

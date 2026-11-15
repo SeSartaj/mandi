@@ -1,9 +1,44 @@
+# Local environments and secrets
 .venv/
-__pycache__/
-*.pyc
+venv/
 .env
+.env.*
+!.env.example
+!.env.*.example
+
+# Python bytecode, tooling caches, and test coverage
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local databases and journal files
 *.sqlite3
+*.sqlite3-*
+
+# Frontend dependencies, builds, and generated test output
 node_modules/
 dist/
 *.tsbuildinfo
-.pytest_cache/
+coverage/
+playwright-report/
+test-results/
+
+# Runtime uploads and collected Django static assets
+/mandi_backend/media/
+/mandi_backend/staticfiles/
+
+# Local review artifacts and logs
+/outputs/
+*.log
+
+# OS and temporary editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~

@@ -10,6 +10,7 @@ type Props = {
   contentClassName?: string;
   headerClassName?: string;
   compound?: boolean;
+  headingLevel?: 1 | 2;
 };
 type HeaderProps = React.ComponentProps<typeof CardHeader> & {
   positionMode?: "default" | "centered";
@@ -30,7 +31,7 @@ const Header = (({ className, positionMode = "default", ...props }) => (
       className={cn(
         positionMode === "centered"
           ? "relative flex flex-col items-center gap-1.5 text-center [&>[data-page-section-actions]]:absolute [&>[data-page-section-actions]]:end-6 [&>[data-page-section-actions]]:top-6"
-          : "grid grid-cols-[1fr_auto] items-start gap-x-4 gap-y-1.5 [&>[data-page-section-actions]]:col-start-2 [&>[data-page-section-actions]]:row-span-2 [&>[data-slot=card-description]]:col-start-1 [&>[data-slot=card-title]]:col-start-1",
+          : "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between",
         "",
         className,
       )}
@@ -39,7 +40,7 @@ const Header = (({ className, positionMode = "default", ...props }) => (
   </>
 )) as Compound["Header"];
 const Divider = (({ className }) => (
-  <div className={`border-border mx-6 border-t-2 ${className ?? ""}`} />
+  <div className={`border-border mx-6 border-t ${className ?? ""}`} />
 )) as Compound["Divider"];
 const Title: Compound["Title"] = ({ className, ...props }) => (
   <CardTitle {...props} className={cn("text-2xl tracking-tight", className)} />
@@ -56,16 +57,26 @@ const PageSectionBase: FC<Props> = ({
   contentClassName,
   headerClassName,
   compound = false,
+  headingLevel = 2,
 }) => (
   <Card className="gap-0">
     {title || description || actions ? (
       <>
-        <Header className={`flex-row items-start justify-between gap-4 ${headerClassName ?? ""}`}>
-          <div className="space-y-1.5">
-            {title && <Title>{title}</Title>}
+        <Header className={headerClassName}>
+          <div className="min-w-0 space-y-1.5">
+            {title &&
+              (headingLevel === 1 ? (
+                <h1 className="text-2xl font-semibold tracking-tight break-words">{title}</h1>
+              ) : (
+                <h2 className="text-lg font-semibold tracking-tight break-words">{title}</h2>
+              ))}
             {description && <Description>{description}</Description>}
           </div>
-          {actions}
+          {actions && (
+            <div className="flex max-w-full flex-wrap items-center gap-2 sm:justify-end">
+              {actions}
+            </div>
+          )}
         </Header>
         <CardContent className={contentClassName ?? "pt-6"}>{children}</CardContent>
       </>

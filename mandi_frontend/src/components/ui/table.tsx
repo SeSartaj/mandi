@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
@@ -9,10 +10,17 @@ type TableProps = React.ComponentProps<"table"> & {
 };
 
 function Table({ className, containerClassName, ...props }: TableProps) {
+  const { t } = useTranslation();
   return (
     <div
       data-slot="table-container"
-      className={cn("relative w-full overflow-x-auto", containerClassName)}
+      tabIndex={0}
+      role="region"
+      aria-label={t("Data table")}
+      className={cn(
+        "focus-visible:ring-ring relative w-full overflow-x-auto focus-visible:ring-2 focus-visible:outline-none",
+        containerClassName,
+      )}
     >
       <table
         data-slot="table"

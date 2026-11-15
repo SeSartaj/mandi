@@ -11,7 +11,13 @@ import FormInput from "@/components/ui/custom/CustomInput";
 import { ThemeToggle } from "@/components/ui/custom/ThemeToggle";
 import { api, errorMessage } from "@/lib/api";
 
-export default function LoginPage({ onLogin }: { onLogin: (token: string) => void }) {
+export default function LoginPage({
+  onLogin,
+  sessionExpired = false,
+}: {
+  onLogin: (token: string) => void;
+  sessionExpired?: boolean;
+}) {
   const { t } = useTranslation();
   const form = useForm({ defaultValues: { username: "", password: "" } });
   const mutation = useMutation({
@@ -38,8 +44,14 @@ export default function LoginPage({ onLogin }: { onLogin: (token: string) => voi
           <LanguageSwitcher />
         </div>
         <h2>{t("Sign in")}</h2>
-        <p className="muted">{t("Review workspace")}</p>
+        <p className="muted">{t("Sign in to your monitoring and inspection workspace.")}</p>
+        {sessionExpired && (
+          <p role="status" className="text-muted-foreground text-sm">
+            {t("Your session expired. Please sign in again.")}
+          </p>
+        )}
         <CustomForm
+          busy={mutation.isPending}
           form={form}
           onSubmit={(values) => mutation.mutate(values)}
           className="space-y-4"
@@ -64,12 +76,11 @@ export default function LoginPage({ onLogin }: { onLogin: (token: string) => voi
               {errorMessage(mutation.error)}
             </div>
           ) : null}
-          <Button className="full" disabled={mutation.isPending}>
-            {t("Sign in")}
+          <Button type="submit" className="full" disabled={mutation.isPending}>
+            {mutation.isPending ? t("Signing in…") : t("Sign in")}
           </Button>
         </CustomForm>
       </Card>
-      <small>{t("Local review build · Live integrations are not connected.")}</small>
     </div>
   );
 }

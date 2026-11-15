@@ -149,26 +149,42 @@ export default function AppTable<T>({
                 return (
                   <TableHead
                     key={header.id}
-                    onClick={() => handleSort(header)}
+                    aria-sort={
+                      header.sortable
+                        ? active
+                          ? descending
+                            ? "descending"
+                            : "ascending"
+                          : "none"
+                        : undefined
+                    }
                     className={cn(
                       header.sortable && "hover:bg-muted/80 cursor-pointer select-none",
                       active && "text-foreground font-semibold",
                       header.className,
                     )}
                   >
-                    <span className="flex items-center gap-1">
-                      <span>{header.label}</span>
-                      {header.sortable &&
-                        (active ? (
-                          descending ? (
-                            <ArrowDown className="size-3" />
+                    {header.sortable ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSort(header)}
+                        className="focus-visible:ring-ring flex w-full items-center gap-1 rounded-sm py-2 text-start focus-visible:ring-2 focus-visible:outline-none"
+                      >
+                        <span>{header.label}</span>
+                        {header.sortable &&
+                          (active ? (
+                            descending ? (
+                              <ArrowDown className="size-3" />
+                            ) : (
+                              <ArrowUp className="size-3" />
+                            )
                           ) : (
-                            <ArrowUp className="size-3" />
-                          )
-                        ) : (
-                          <ArrowUpDown className="size-3 opacity-40" />
-                        ))}
-                    </span>
+                            <ArrowUpDown className="size-3 opacity-40" />
+                          ))}
+                      </button>
+                    ) : (
+                      header.label
+                    )}
                   </TableHead>
                 );
               })}
@@ -231,7 +247,7 @@ export default function AppTable<T>({
                 {title && (
                   <CardTitle className="flex items-center gap-2">
                     {titleIcon}
-                    {title}
+                    <h2>{title}</h2>
                   </CardTitle>
                 )}
                 {description && <CardDescription>{description}</CardDescription>}

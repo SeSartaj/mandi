@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
+import { Link } from "react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { Establishment, SourceLink } from "@/lib/api";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { api, errorMessage } from "@/lib/api";
 
 type Candidate = {
@@ -33,16 +35,23 @@ export default function SourcePanel({
   const { t } = useTranslation();
   const client = useQueryClient();
   const link = establishment.source_links.find((item) => item.source === source);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const [page, setPage] = useState(1);
   const candidates = useQuery({
-    queryKey: ["source", source, establishment.kind, search],
+    queryKey: ["source", source, establishment.kind, debouncedSearch, page],
     enabled: open,
-    queryFn: async () =>
+    queryFn: async ({ signal }) =>
       (
-        await api.get<{ results: Candidate[] }>(`/sources/${source}/`, {
-          params: { kind: establishment.kind, search },
-        })
+        await api.get<{ results: Candidate[]; is_demo: boolean; has_next: boolean }>(
+          `/sources/${source}/`,
+          {
+            params: { kind: establishment.kind, search: debouncedSearch, page },
+            signal,
+          },
+        )
       ).data,
   });
   const mutation = useMutation({
@@ -53,6 +62,7 @@ export default function SourcePanel({
     onSuccess: () => {
       client.invalidateQueries();
       setOpen(false);
+      setDisconnecting(false);
     },
   });
 
@@ -65,6 +75,14 @@ export default function SourcePanel({
       <CardContent className="space-y-4">
         {link ? (
           <>
+            <Can permission="establishments.view_sourcelink">
+              <Link
+                className="text-link text-base font-semibold"
+                to={`/establishments/${establishment.id}/sources/${source}`}
+              >
+                {String(link.details.name || establishment.name)} · {t("View details")}
+              </Link>
+            </Can>
             <dl className="details-list">
               {Object.entries(link.details).map(([key, value]) => (
                 <div key={key}>
@@ -78,7 +96,10 @@ export default function SourcePanel({
               <Button
                 variant="outline"
                 disabled={mutation.isPending}
-                onClick={() => mutation.mutate(null)}
+                onClick={() => {
+                  mutation.reset();
+                  setDisconnecting(true);
+                }}
               >
                 {t("Disconnect")}
               </Button>
@@ -100,17 +121,56 @@ export default function SourcePanel({
         ) : null}
       </CardContent>
 
+      <AppDialog
+        open={disconnecting}
+        onOpenChange={(value) => {
+          if (!mutation.isPending) setDisconnecting(value);
+        }}
+        title={t("Disconnect this source?")}
+        description={t(
+          "This removes the link from Mandi. The source record will remain available to connect again.",
+        )}
+        showCloseButton={!mutation.isPending}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              disabled={mutation.isPending}
+              onClick={() => setDisconnecting(false)}
+            >
+              {t("Cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={mutation.isPending}
+              onClick={() => mutation.mutate(null)}
+            >
+              {t("Disconnect")}
+            </Button>
+          </>
+        }
+      >
+        <p className="font-medium">{t(title)}</p>
+        {mutation.error && (
+          <div role="alert" className="error-box">
+            {errorMessage(mutation.error)}
+          </div>
+        )}
+      </AppDialog>
       <AppDialog open={open} onOpenChange={setOpen} title={t(title)} size="lg">
         <div className="space-y-4">
           <p className="muted">
             {t("Select a record to connect. Source details remain separate from Mandi details.")}
           </p>
-          <Badge variant="secondary">{t("Demonstration data")}</Badge>
+          {candidates.data?.is_demo && <Badge variant="secondary">{t("Demonstration data")}</Badge>}
           <Input
             aria-label={t("Search")}
             placeholder={t("Search")}
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
           />
           {candidates.isPending ? (
             <AppLoader label={t("Loading…")} className="py-8" />
@@ -137,6 +197,23 @@ export default function SourcePanel({
               ) : null}
             </div>
           )}
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              variant="outline"
+              disabled={page === 1 || candidates.isFetching}
+              onClick={() => setPage(page - 1)}
+            >
+              {t("Previous")}
+            </Button>
+            <span>{page}</span>
+            <Button
+              variant="outline"
+              disabled={!candidates.data?.has_next || candidates.isFetching}
+              onClick={() => setPage(page + 1)}
+            >
+              {t("Next")}
+            </Button>
+          </div>
         </div>
       </AppDialog>
     </Card>
