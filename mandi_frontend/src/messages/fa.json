@@ -251,5 +251,10 @@
   "Refresh": "تازه‌سازی",
   "Licensing": "جوازدهی",
   "Survey": "سروی",
-  "Archive": "آرشیف"
+  "Archive": "آرشیف",
+  "Create": "ایجاد",
+  "Creating…": "در حال ایجاد…",
+  "Delete": "حذف",
+  "Deleting…": "در حال حذف…",
+  "Remove file": "حذف فایل"
 }

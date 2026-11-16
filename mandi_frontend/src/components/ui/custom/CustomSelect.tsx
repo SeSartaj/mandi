@@ -21,6 +21,9 @@ export interface SelectOption {
 
 // ===== Base Component (UI Logic) =====
 interface BaseSelectProps {
+  id?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: React.AriaAttributes["aria-invalid"];
   ariaLabel?: string;
   value?: string;
   onValueChange?: (value: string) => void;
@@ -40,6 +43,9 @@ interface BaseSelectProps {
 }
 
 function BaseSelect({
+  id,
+  "aria-describedby": describedBy,
+  "aria-invalid": invalid,
   ariaLabel,
   value,
   onValueChange,
@@ -61,6 +67,9 @@ function BaseSelect({
   return (
     <Select value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger
+        id={id}
+        aria-describedby={describedBy}
+        aria-invalid={invalid ?? hasError}
         aria-label={ariaLabel}
         className={cn(
           "w-full",
@@ -103,6 +112,7 @@ interface FormSelectProps<T extends FieldValues> {
   form: UseFormReturn<T>;
   name: Path<T>;
   label: string;
+  description?: React.ReactNode;
   items: SelectOption[];
 
   placeholder?: string;
@@ -131,6 +141,7 @@ function FormSelect<T extends FieldValues>({
   form,
   name,
   label,
+  description,
   items,
   placeholder,
   disabled,
@@ -151,7 +162,7 @@ function FormSelect<T extends FieldValues>({
 
   onValueChange,
   rules,
-  reserveErrorSpace = false,
+  reserveErrorSpace = true,
 }: FormSelectProps<T>) {
   return (
     <FormField
@@ -176,6 +187,7 @@ function FormSelect<T extends FieldValues>({
             labelClassName={labelClassName}
             containerClassName={containerClassName}
             label={label}
+            description={description}
             reserveErrorSpace={reserveErrorSpace}
           >
             <BaseSelect
@@ -209,6 +221,7 @@ interface SimpleSelectProps {
   items: SelectOption[];
 
   label?: string;
+  description?: React.ReactNode;
   placeholder?: string;
   disabled?: boolean;
   error?: string;
@@ -231,6 +244,7 @@ export function SimpleSelect({
   items,
 
   label,
+  description,
   placeholder,
   disabled,
   error,
@@ -251,6 +265,7 @@ export function SimpleSelect({
       containerClassName={containerClassName}
       labelClassName={labelClassName}
       label={label}
+      description={description}
       error={error}
     >
       <BaseSelect

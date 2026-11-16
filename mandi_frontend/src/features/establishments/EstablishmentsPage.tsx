@@ -1,5 +1,6 @@
+import { CreateButton } from "@/components/public/ActionButton";
 import { useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
@@ -49,10 +50,7 @@ export default function EstablishmentsPage() {
         description={t("Monitoring & inspection registry")}
         actions={
           <Can permission="establishments.add_establishment">
-            <Button onClick={() => setOpen(true)}>
-              <Plus />
-              {t("Add establishment")}
-            </Button>
+            <CreateButton onClick={() => setOpen(true)} label={t("Add establishment")} />
           </Can>
         }
       >

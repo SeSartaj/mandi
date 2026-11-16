@@ -1,5 +1,7 @@
+import { DeleteButton } from "@/components/public/ActionButton";
+import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { CloudUpload, FileText, Image as ImageIcon, X } from "lucide-react";
+import { CloudUpload, FileText, Image as ImageIcon } from "lucide-react";
 import {
   useWatch,
   type FieldValues,
@@ -72,10 +74,11 @@ function CustomFileInput<T extends FieldValues>({
   containerClassName,
   rules,
   required = false,
-  reserveErrorSpace = false,
+  reserveErrorSpace = true,
   disabled = false,
 }: CustomFileInputProps<T>) {
   const t = useTranslations("Form");
+  const { t: translate } = useTranslation();
   const locale = useLocale();
   const watchedFile: unknown = useWatch({ control: form.control, name });
   const [files, setFiles] = useState<File[]>([]);
@@ -149,6 +152,7 @@ function CustomFileInput<T extends FieldValues>({
           labelClassName={labelClassName}
           containerClassName={containerClassName}
           reserveErrorSpace={reserveErrorSpace}
+          description={description}
         >
           <div>
             <FileUploader
@@ -198,17 +202,16 @@ function CustomFileInput<T extends FieldValues>({
                           </span>
                         </span>
 
-                        <button
-                          type="button"
-                          aria-label={locale === "en" ? "Remove file" : "دوتنه لرې کړئ"}
-                          className="hover:bg-muted flex shrink-0 items-center justify-center rounded-full p-1"
+                        <DeleteButton
+                          iconOnly
+                          variant="secondary"
+                          size="xs"
+                          label={translate("Remove file")}
                           onClick={(event) => {
                             event.stopPropagation();
                             handleValueChange(null);
                           }}
-                        >
-                          <X className="size-4" />
-                        </button>
+                        />
                       </span>
                     </>
                   ) : (
@@ -249,7 +252,6 @@ function CustomFileInput<T extends FieldValues>({
                 </div>
               )}
             </FileUploader>
-            {description && <p className="text-muted-foreground mt-1 text-xs">{description}</p>}
           </div>
         </FormInputLayout>
       )}

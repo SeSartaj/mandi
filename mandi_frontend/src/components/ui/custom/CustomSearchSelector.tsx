@@ -596,7 +596,7 @@ export function CustomSearchSelector<TFieldValues extends FieldValues, TData = u
     onValueChange,
     label,
     required = false,
-    reserveErrorSpace = false,
+    reserveErrorSpace = true,
     containerClassName,
     labelClassName,
     defaultOptions: _defaultOptions = [],

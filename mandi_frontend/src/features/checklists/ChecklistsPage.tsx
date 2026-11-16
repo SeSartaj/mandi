@@ -1,5 +1,6 @@
+import { CreateButton, EditButton, CancelButton } from "@/components/public/ActionButton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, FileSpreadsheet, Plus, Rocket } from "lucide-react";
+import { Download, ExternalLink, FileSpreadsheet, Rocket } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
@@ -78,15 +79,13 @@ export default function ChecklistsPage() {
               </Button>
             </Can>
             <Can permission="inspections.add_checklist">
-              <Button
+              <CreateButton
                 onClick={() => {
                   setEditing(null);
                   setOpen(true);
                 }}
-              >
-                <Plus />
-                {t("Add checklist")}
-              </Button>
+                label={t("Add checklist")}
+              />
             </Can>
           </div>
         }
@@ -172,16 +171,14 @@ export default function ChecklistsPage() {
                   <TableCell>
                     <div className="inline-actions">
                       <Can permission="inspections.change_checklist">
-                        <Button
+                        <EditButton
                           size="sm"
-                          variant="outline"
+                          variant="secondary"
                           onClick={() => {
                             setEditing(checklist);
                             setOpen(true);
                           }}
-                        >
-                          {t("Edit")}
-                        </Button>
+                        />
                       </Can>
                       <Can permission="inspections.deploy_checklist">
                         <Button
@@ -233,13 +230,11 @@ export default function ChecklistsPage() {
         }}
         footer={
           <>
-            <Button
-              variant="outline"
+            <CancelButton
+              variant="secondary"
               disabled={deploy.isPending}
               onClick={() => setDeploying(null)}
-            >
-              {t("Cancel")}
-            </Button>
+            />
             <Button
               disabled={deploy.isPending}
               onClick={() => {

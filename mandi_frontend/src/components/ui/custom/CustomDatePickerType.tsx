@@ -106,6 +106,9 @@ const useDateLogic = (
 
 // ===== Base Component (UI Logic) =====
 interface BaseDatePickerProps {
+  id?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: React.AriaAttributes["aria-invalid"];
   ariaLabel?: string;
   calendarType: CalendarType;
   setCalendarType: (type: CalendarType) => void;
@@ -144,6 +147,9 @@ function CalendarFooterPlugin({
 }
 
 function BaseDatePicker({
+  id,
+  "aria-describedby": describedBy,
+  "aria-invalid": invalid,
   ariaLabel,
   calendarType,
   setCalendarType,
@@ -306,6 +312,9 @@ function BaseDatePicker({
           render={(_, openCalendar) => (
             <div className="relative w-full">
               <Input
+                id={id}
+                aria-describedby={describedBy}
+                aria-invalid={invalid ?? hasError}
                 aria-label={ariaLabel}
                 value={inputValue}
                 onClick={!disabled ? openCalendar : undefined}
@@ -405,7 +414,7 @@ function FormDatePicker<T extends FieldValues>({
   defaultClearValue = "",
   onValueChange,
   rules,
-  reserveErrorSpace = false,
+  reserveErrorSpace = true,
   calendarFooter,
 }: FormDatePickerProps<T>) {
   const [calendarType, setCalendarType] = useState<CalendarType>(initialCalendar);

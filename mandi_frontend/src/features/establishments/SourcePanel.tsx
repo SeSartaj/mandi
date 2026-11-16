@@ -1,3 +1,4 @@
+import { CancelButton } from "@/components/public/ActionButton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { Link } from "react-router";
@@ -133,13 +134,11 @@ export default function SourcePanel({
         showCloseButton={!mutation.isPending}
         footer={
           <>
-            <Button
-              variant="outline"
+            <CancelButton
+              variant="secondary"
               disabled={mutation.isPending}
               onClick={() => setDisconnecting(false)}
-            >
-              {t("Cancel")}
-            </Button>
+            />
             <Button
               variant="destructive"
               disabled={mutation.isPending}

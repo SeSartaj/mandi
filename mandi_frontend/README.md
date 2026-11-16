@@ -40,3 +40,6 @@ See [frontend usability review](../docs/frontend-usability-review.md) for the
 10-heuristic assessment, shared-component refactors, regression checks, browser
 verification, and the remaining deployment boundary. Run `npm test` for both
 permission/calendar and frontend state/session regression tests.
+
+Reusable action buttons and fixed help/error space are documented in
+[semantic controls](../docs/semantic-controls.md).

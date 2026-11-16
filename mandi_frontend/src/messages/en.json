@@ -40,5 +40,10 @@
   "Refresh": "Refresh",
   "Licensing": "Licensing",
   "Survey": "Survey",
-  "Archive": "Archive"
+  "Archive": "Archive",
+  "Create": "Create",
+  "Creating…": "Creating…",
+  "Delete": "Delete",
+  "Deleting…": "Deleting…",
+  "Remove file": "Remove file"
 }

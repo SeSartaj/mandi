@@ -17,7 +17,8 @@ import {
   type DropzoneState,
   type FileRejection,
 } from "react-dropzone";
-import { X as RemoveIcon } from "lucide-react";
+import { DeleteButton } from "@/components/public/ActionButton";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Input } from "@/components/ui/input";
@@ -242,6 +243,7 @@ interface FileUploaderItemProps extends HTMLAttributes<HTMLDivElement> {
 export const FileUploaderItem = forwardRef<HTMLDivElement, FileUploaderItemProps>(
   ({ className, index, children, ...props }, ref) => {
     const { removeFileFromSet, activeIndex, direction } = useFileUpload();
+    const { t } = useTranslation();
     const isSelected = index === activeIndex;
     return (
       <div
@@ -259,27 +261,22 @@ export const FileUploaderItem = forwardRef<HTMLDivElement, FileUploaderItemProps
         </div>
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
-              type="button"
-              tabIndex={-1}
-              aria-label={
-                direction === "rtl" ? "دا فایل له فورم څخه لرې کړئ" : "Remove file from the form"
-              }
+            <DeleteButton
+              iconOnly
+              size="xs"
+              variant="secondary"
+              label={t("Remove file")}
               className={cn(
-                "absolute top-1/2 -translate-y-1/2 rounded p-1",
+                "absolute top-1/2 -translate-y-1/2",
                 direction === "rtl" ? "left-1" : "right-1",
               )}
               onClick={(event) => {
                 event.stopPropagation();
                 removeFileFromSet(index);
               }}
-            >
-              <RemoveIcon className="hover:stroke-destructive size-4" />
-            </button>
+            />
           </TooltipTrigger>
-          <TooltipContent>
-            {direction === "rtl" ? "دا فایل له فورم څخه لرې کړئ" : "Remove file from the form"}
-          </TooltipContent>
+          <TooltipContent>{t("Remove file")}</TooltipContent>
         </Tooltip>
       </div>
     );

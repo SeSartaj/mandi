@@ -1,3 +1,5 @@
+import { FieldSupport } from "@/components/ui/field-support";
+import { CancelButton, SaveButton } from "@/components/public/ActionButton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -6,7 +8,6 @@ import { useSession } from "@/lib/session";
 import { AppErrorState } from "@/components/public/AppErrorState";
 import { Can } from "@/components/Can";
 import { DialogClose } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import CustomForm from "@/components/ui/custom/CustomForm";
 import FormInput from "@/components/ui/custom/CustomInput";
 import { CustomSearchSelector } from "@/components/ui/custom/CustomSearchSelector";
@@ -95,20 +96,12 @@ export default function EmployeeForm({ onClose }: { onClose: () => void }) {
           multichoice
         />
       </Can>
-      {mutation.error ? (
-        <div role="alert" className="error-box">
-          {errorMessage(mutation.error)}
-        </div>
-      ) : null}
+      <FieldSupport error={mutation.error ? errorMessage(mutation.error) : undefined} />
       <div className="form-actions">
         <DialogClose asChild>
-          <Button type="button" variant="outline" disabled={mutation.isPending}>
-            {t("Cancel")}
-          </Button>
+          <CancelButton type="button" variant="secondary" disabled={mutation.isPending} />
         </DialogClose>
-        <Button disabled={mutation.isPending}>
-          {mutation.isPending ? t("Saving…") : t("Save")}
-        </Button>
+        <SaveButton disabled={mutation.isPending} loading={mutation.isPending} />
       </div>
     </CustomForm>
   );

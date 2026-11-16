@@ -14,6 +14,7 @@ import {
 } from "react-hook-form";
 
 import { cn } from "@/lib/utils";
+import { FieldSupport } from "@/components/ui/field-support";
 import { Label } from "@/components/ui/label";
 
 const Form = FormProvider;
@@ -94,13 +95,13 @@ function FormLabel({ className, ...props }: React.ComponentProps<typeof LabelPri
 }
 
 function FormControl({ ...props }: React.ComponentProps<typeof Slot>) {
-  const { error, formItemId, formDescriptionId, formMessageId } = useFormField();
+  const { error, formItemId, formMessageId } = useFormField();
 
   return (
     <Slot
       data-slot="form-control"
       id={formItemId}
-      aria-describedby={!error ? `${formDescriptionId}` : `${formDescriptionId} ${formMessageId}`}
+      aria-describedby={formMessageId}
       aria-invalid={!!error}
       {...props}
     />
@@ -124,20 +125,14 @@ function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
   const { error, formMessageId } = useFormField();
   const body = error ? String(error?.message ?? "") : props.children;
 
-  if (!body) {
-    return null;
-  }
-
   return (
-    <p
-      role="alert"
-      data-slot="form-message"
-      id={formMessageId}
-      className={cn("text-destructive text-sm", className)}
+    <FieldSupport
       {...props}
-    >
-      {body}
-    </p>
+      id={formMessageId}
+      error={error ? body : undefined}
+      description={!error ? body : undefined}
+      className={className}
+    />
   );
 }
 

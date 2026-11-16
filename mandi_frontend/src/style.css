@@ -599,3 +599,21 @@ html[dir="rtl"] .back-link > svg {
     scroll-behavior: auto !important;
   }
 }
+
+/* Every control keeps the same message footprint before and after validation. */
+.field-support {
+  block-size: 2rem;
+  min-block-size: 2rem;
+  max-block-size: 2rem;
+  margin: 0;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+.field-support:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

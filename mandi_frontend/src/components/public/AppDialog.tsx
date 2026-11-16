@@ -1,8 +1,9 @@
 "use client";
 
+import { CancelButton, DiscardButton } from "@/components/public/ActionButton";
+
 import * as React from "react";
 import { DialogFormState } from "./dialog-form-state";
-import { Button } from "@/components/ui/button";
 import { XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
@@ -240,19 +241,19 @@ export function AppDialog({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDiscard(false)}>
-              {t("Keep editing")}
-            </Button>
-            <Button
-              variant="destructive"
+            <CancelButton
+              variant="secondary"
+              onClick={() => setConfirmDiscard(false)}
+              label={t("Keep editing")}
+            />
+            <DiscardButton
+              variant="primary"
               onClick={() => {
                 setConfirmDiscard(false);
                 if (!isControlled) setInternalOpen(false);
                 onOpenChange?.(false);
               }}
-            >
-              {t("Discard changes")}
-            </Button>
+            />
           </DialogFooter>
         </DialogContent>
       </Dialog>

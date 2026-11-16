@@ -251,5 +251,10 @@
   "Refresh": "تازه کول",
   "Licensing": "جواز ورکول",
   "Survey": "سروې",
-  "Archive": "آرشیف"
+  "Archive": "آرشیف",
+  "Create": "جوړول",
+  "Creating…": "د جوړولو په حال کې…",
+  "Delete": "ړنګول",
+  "Deleting…": "د ړنګولو په حال کې…",
+  "Remove file": "دوتنه لرې کړئ"
 }

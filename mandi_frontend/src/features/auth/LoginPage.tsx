@@ -1,3 +1,4 @@
+import { FieldSupport } from "@/components/ui/field-support";
 import { useMutation } from "@tanstack/react-query";
 import { ShieldCheck } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -71,11 +72,7 @@ export default function LoginPage({
             autoComplete="current-password"
             rules={{ required: t("Required") }}
           />
-          {mutation.error ? (
-            <div role="alert" className="error-box">
-              {errorMessage(mutation.error)}
-            </div>
-          ) : null}
+          <FieldSupport error={mutation.error ? errorMessage(mutation.error) : undefined} />
           <Button type="submit" className="full" disabled={mutation.isPending}>
             {mutation.isPending ? t("Signing in…") : t("Sign in")}
           </Button>

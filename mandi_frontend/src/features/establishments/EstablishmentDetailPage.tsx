@@ -1,3 +1,4 @@
+import { EditButton } from "@/components/public/ActionButton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, RefreshCw } from "lucide-react";
 import { useState } from "react";
@@ -125,9 +126,11 @@ export default function EstablishmentDetailPage() {
         description={`${t(choiceLabel(establishment.kind))} · ${establishment.province}`}
         others={
           <Can permission="establishments.change_establishment">
-            <Button variant="outline" onClick={() => setEdit(true)}>
-              {t("Edit details")}
-            </Button>
+            <EditButton
+              variant="secondary"
+              onClick={() => setEdit(true)}
+              label={t("Edit details")}
+            />
           </Can>
         }
       />

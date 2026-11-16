@@ -34,6 +34,7 @@ interface FormTextareaProps<T extends FieldValues> extends Omit<
   form: UseFormReturn<T>;
   name: Path<T>;
   label: string;
+  description?: React.ReactNode;
 
   containerClassName?: string;
   labelClassName?: string;
@@ -48,6 +49,7 @@ function FormTextarea<T extends FieldValues>({
   form,
   name,
   label,
+  description,
   containerClassName,
   labelClassName,
   clearFieldsOnChange = [],
@@ -80,6 +82,7 @@ function FormTextarea<T extends FieldValues>({
             labelClassName={labelClassName}
             containerClassName={containerClassName}
             label={label}
+            description={description}
           >
             <BaseTextarea
               {...textareaProps}
@@ -99,6 +102,7 @@ export default FormTextarea;
 // ===== Simple Textarea (Standalone) =====
 interface SimpleTextareaProps extends BaseTextareaProps {
   label?: string;
+  description?: React.ReactNode;
   error?: string;
   containerClassName?: string;
   labelClassName?: string;
@@ -106,6 +110,7 @@ interface SimpleTextareaProps extends BaseTextareaProps {
 
 export function SimpleTextarea({
   label,
+  description,
   error,
   containerClassName,
   labelClassName,
@@ -116,6 +121,7 @@ export function SimpleTextarea({
       containerClassName={containerClassName}
       labelClassName={labelClassName}
       label={label}
+      description={description}
       error={error}
     >
       <BaseTextarea hasError={!!error} {...textareaProps} />

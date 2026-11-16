@@ -1,3 +1,5 @@
+import { FieldSupport } from "@/components/ui/field-support";
+import { CancelButton, SaveButton } from "@/components/public/ActionButton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useWatch } from "react-hook-form";
@@ -6,7 +8,6 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
 import { DialogClose } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import CustomFileInput from "@/components/ui/custom/CustomFileInput";
 import CustomForm from "@/components/ui/custom/CustomForm";
 import FormInput from "@/components/ui/custom/CustomInput";
@@ -123,12 +124,10 @@ export default function ChecklistForm({
           "Checklist details are read from the XLSForm settings. Review them and fill in any missing values.",
         )}
       </p>
-      {reading && <p role="status">{t("Reading XLSForm settings...")}</p>}
-      {metadataError && (
-        <div role="alert" className="error-box">
-          {metadataError}
-        </div>
-      )}
+      <FieldSupport
+        description={reading ? t("Reading XLSForm settings...") : undefined}
+        error={metadataError}
+      />
       <fieldset disabled={reading || mutation.isPending}>
         <div className="form-grid">
           <FormInput
@@ -169,20 +168,12 @@ export default function ChecklistForm({
         </a>
       ) : null}
 
-      {mutation.error ? (
-        <div role="alert" className="error-box">
-          {errorMessage(mutation.error)}
-        </div>
-      ) : null}
+      <FieldSupport error={mutation.error ? errorMessage(mutation.error) : undefined} />
       <div className="form-actions">
         <DialogClose asChild>
-          <Button type="button" variant="outline" disabled={mutation.isPending}>
-            {t("Cancel")}
-          </Button>
+          <CancelButton type="button" variant="secondary" disabled={mutation.isPending} />
         </DialogClose>
-        <Button disabled={mutation.isPending || reading}>
-          {mutation.isPending ? t("Saving…") : t("Save")}
-        </Button>
+        <SaveButton disabled={mutation.isPending || reading} loading={mutation.isPending} />
       </div>
     </CustomForm>
   );

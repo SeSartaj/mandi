@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { FieldSupport } from "@/components/ui/field-support";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -35,7 +36,6 @@ export function FormField({
   required = false,
   description,
   error,
-  reserveErrorSpace = false,
   className,
   children,
 }: FormFieldProps) {
@@ -50,7 +50,7 @@ export function FormField({
       ...new Set(
         [
           child?.props["aria-describedby"],
-          description ? `${fieldId}-description` : undefined,
+          description && !error ? `${fieldId}-description` : undefined,
           error ? `${fieldId}-error` : undefined,
         ]
           .filter(Boolean)
@@ -91,20 +91,11 @@ export function FormField({
           {control}
         </>
       )}
-      {description && (
-        <p id={`${fieldId}-description`} className="text-muted-foreground text-sm">
-          {description}
-        </p>
-      )}
-      {(error || reserveErrorSpace) && (
-        <p
-          id={`${fieldId}-error`}
-          role={error ? "alert" : undefined}
-          className="text-destructive text-xxs min-h-3 leading-3"
-        >
-          {error || "\u00a0"}
-        </p>
-      )}
+      <FieldSupport
+        id={error ? `${fieldId}-error` : `${fieldId}-description`}
+        description={description}
+        error={error}
+      />
     </div>
   );
 }
@@ -133,7 +124,7 @@ export function TextField({
   labelDisplay,
   description,
   error,
-  reserveErrorSpace = false,
+  reserveErrorSpace = true,
   ...inputProps
 }: TextFieldProps) {
   return (
@@ -154,7 +145,7 @@ export function TextField({
         aria-describedby={
           [
             inputProps["aria-describedby"],
-            description ? `${id}-description` : undefined,
+            description && !error ? `${id}-description` : undefined,
             error ? `${id}-error` : undefined,
           ]
             .filter(Boolean)

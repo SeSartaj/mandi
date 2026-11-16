@@ -1,5 +1,5 @@
+import { CreateButton } from "@/components/public/ActionButton";
 import { useState } from "react";
-import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Can } from "@/components/Can";
@@ -9,7 +9,6 @@ import { AppErrorState } from "@/components/public/AppErrorState";
 import { AppLoader } from "@/components/public/AppLoader";
 import AppTable from "@/components/public/AppTable";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import EmployeeForm from "@/features/employees/EmployeeForm";
 import { useApiQuery } from "@/features/shared/api";
@@ -39,10 +38,7 @@ export default function EmployeesPage() {
         description={t("Employee directory")}
         actions={
           <Can permission="accounts.add_user">
-            <Button onClick={() => setOpen(true)}>
-              <Plus />
-              {t("Add employee")}
-            </Button>
+            <CreateButton onClick={() => setOpen(true)} label={t("Add employee")} />
           </Can>
         }
       >

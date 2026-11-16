@@ -1,5 +1,6 @@
 import React from "react";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@/components/ui/form"; // مسیر کامپوننت‌های shadcn خود را چک کنید
+import { FieldSupport } from "@/components/ui/field-support";
 import { cn } from "@/lib/utils";
 
 // ==========================================
@@ -8,7 +9,9 @@ import { cn } from "@/lib/utils";
 interface FormInputLayoutProps {
   label?: React.ReactNode;
   required?: boolean;
+  /** @deprecated Message space is always reserved. */
   reserveErrorSpace?: boolean;
+  description?: React.ReactNode;
   labelClassName?: string;
   containerClassName?: string;
   children: React.ReactNode;
@@ -17,7 +20,7 @@ interface FormInputLayoutProps {
 export const FormInputLayout = ({
   label,
   required = false,
-  reserveErrorSpace = false,
+  description,
   labelClassName,
   containerClassName,
   children,
@@ -31,9 +34,7 @@ export const FormInputLayout = ({
         </FormLabel>
       )}
       <FormControl>{children}</FormControl>
-      <div className={reserveErrorSpace ? "min-h-3" : undefined}>
-        <FormMessage className="text-destructive text-xs leading-3" />
-      </div>
+      <FormMessage>{description}</FormMessage>
     </FormItem>
   );
 };
@@ -46,7 +47,9 @@ interface SimpleInputLayoutProps {
   label?: string;
   error?: string;
   required?: boolean;
+  /** @deprecated Message space is always reserved. */
   reserveErrorSpace?: boolean;
+  description?: React.ReactNode;
   labelClassName?: string;
   containerClassName?: string;
   children: React.ReactNode;
@@ -57,7 +60,7 @@ export const SimpleInputLayout = ({
   label,
   error,
   required = false,
-  reserveErrorSpace = false,
+  description,
   labelClassName,
   containerClassName,
   children,
@@ -80,15 +83,7 @@ export const SimpleInputLayout = ({
 
       {children}
 
-      {(error || reserveErrorSpace) && (
-        <p
-          id={id ? `${id}-error` : undefined}
-          role={error ? "alert" : undefined}
-          className="text-destructive min-h-3 text-xs leading-3 font-medium"
-        >
-          {error || "\u00a0"}
-        </p>
-      )}
+      <FieldSupport id={id ? `${id}-error` : undefined} error={error} description={description} />
     </div>
   );
 };

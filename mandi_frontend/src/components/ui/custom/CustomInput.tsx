@@ -163,6 +163,7 @@ interface FormInputProps<T extends FieldValues> extends Omit<
   form: UseFormReturn<T>;
   name: Path<T>;
   label: string;
+  description?: React.ReactNode;
   containerClassName?: string;
   labelClassName?: string;
   clearFieldsOnChange?: ClearFieldItem<T>[];
@@ -183,13 +184,14 @@ function FormInput<T extends FieldValues>({
   form,
   name,
   label,
+  description,
   containerClassName,
   labelClassName,
   clearFieldsOnChange = [],
   defaultClearValue = "",
   onValueChange,
   rules,
-  reserveErrorSpace = false,
+  reserveErrorSpace = true,
   onlyDigits = false,
   length,
   mask,
@@ -253,6 +255,7 @@ function FormInput<T extends FieldValues>({
             labelClassName={labelClassName}
             containerClassName={containerClassName}
             label={label}
+            description={description}
             required={inputProps.required || Boolean(rules?.required)}
             reserveErrorSpace={reserveErrorSpace}
           >
@@ -279,6 +282,7 @@ export default FormInput;
 // ===== Simple Input =====
 interface SimpleInputProps extends Omit<BaseInputProps, "leftAddon"> {
   label?: string;
+  description?: React.ReactNode;
   error?: string;
   containerClassName?: string;
   labelClassName?: string;
@@ -297,6 +301,7 @@ interface SimpleInputProps extends Omit<BaseInputProps, "leftAddon"> {
 
 export function SimpleInput({
   label,
+  description,
   error,
   containerClassName,
   labelClassName,
@@ -305,7 +310,7 @@ export function SimpleInput({
   value,
   onChange,
   leftAddon,
-  reserveErrorSpace = false,
+  reserveErrorSpace = true,
   onlyDigits = false,
   length,
   required = false,
@@ -418,6 +423,7 @@ export function SimpleInput({
       containerClassName={containerClassName}
       labelClassName={labelClassName}
       label={label}
+      description={description}
       error={error}
       required={required}
       reserveErrorSpace={reserveErrorSpace}

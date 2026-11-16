@@ -1,10 +1,11 @@
+import { FieldSupport } from "@/components/ui/field-support";
+import { CancelButton, SaveButton } from "@/components/public/ActionButton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
 import { DialogClose } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import CustomForm from "@/components/ui/custom/CustomForm";
 import FormInput from "@/components/ui/custom/CustomInput";
 import FormSelect from "@/components/ui/custom/CustomSelect";
@@ -83,20 +84,12 @@ export default function EstablishmentForm({
         <FormInput form={form} name="phone" label={t("Phone")} maxLength={100} />
       </div>
       <FormTextarea form={form} name="address" label={t("Address")} />
-      {mutation.error ? (
-        <div role="alert" className="error-box">
-          {errorMessage(mutation.error)}
-        </div>
-      ) : null}
+      <FieldSupport error={mutation.error ? errorMessage(mutation.error) : undefined} />
       <div className="form-actions">
         <DialogClose asChild>
-          <Button type="button" variant="outline" disabled={mutation.isPending}>
-            {t("Cancel")}
-          </Button>
+          <CancelButton type="button" variant="secondary" disabled={mutation.isPending} />
         </DialogClose>
-        <Button disabled={mutation.isPending}>
-          {mutation.isPending ? t("Saving…") : t("Save")}
-        </Button>
+        <SaveButton disabled={mutation.isPending} loading={mutation.isPending} />
       </div>
     </CustomForm>
   );
