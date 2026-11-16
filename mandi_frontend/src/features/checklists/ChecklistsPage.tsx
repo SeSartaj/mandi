@@ -19,7 +19,7 @@ import ChecklistForm from "@/features/checklists/ChecklistForm";
 import { useApiQuery } from "@/features/shared/api";
 import { choiceLabel } from "@/features/shared/labels";
 import type { Checklist } from "@/lib/api";
-import { api, errorMessage, fileUrl } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 
 export default function ChecklistsPage() {
   const { t } = useTranslation();
@@ -36,9 +36,24 @@ export default function ChecklistsPage() {
       client.invalidateQueries({ queryKey: ["form-checklists"] });
     },
   });
+  const downloadXls = useMutation({
+    mutationFn: async (checklist: Checklist) => {
+      const response = await api.get(`/checklists/${checklist.id}/download/`, {
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = checklist.xlsform?.split("/").pop() || "checklist.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    },
+  });
   const downloadCsv = useMutation({
     mutationFn: async () => {
-      const response = await api.get("/integrations/kobo/establishments.csv", {
+      const response = await api.get("/integrations/establishments.csv", {
         responseType: "blob",
       });
       const url = URL.createObjectURL(response.data);
@@ -90,9 +105,9 @@ export default function ChecklistsPage() {
           </div>
         }
       >
-        {deploy.error || downloadCsv.error ? (
+        {deploy.error || downloadCsv.error || downloadXls.error ? (
           <div role="alert" className="error-box">
-            {errorMessage(deploy.error ?? downloadCsv.error)}
+            {errorMessage(deploy.error ?? downloadCsv.error ?? downloadXls.error)}
           </div>
         ) : null}
 
@@ -131,7 +146,11 @@ export default function ChecklistsPage() {
                     {checklist.xlsform ? (
                       <a
                         className="text-link"
-                        href={fileUrl(checklist.xlsform)}
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          downloadXls.mutate(checklist);
+                        }}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -144,26 +163,26 @@ export default function ChecklistsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="space-y-1">
-                      <DeploymentBadge status={checklist.kobo_deployment_status} />
-                      {checklist.kobo_deployed_at ? (
+                      <DeploymentBadge status={checklist.collection.status} />
+                      {checklist.collection.deployed_at ? (
                         <small className="muted block">
-                          <SystemDateTime value={checklist.kobo_deployed_at} includeTime />
+                          <SystemDateTime value={checklist.collection.deployed_at} includeTime />
                         </small>
                       ) : null}
-                      {checklist.kobo_deployment_error ? (
+                      {checklist.collection.error ? (
                         <small className="text-destructive block max-w-72 whitespace-normal">
-                          {checklist.kobo_deployment_error}
+                          {checklist.collection.error}
                         </small>
                       ) : null}
-                      {checklist.kobo_project_url ? (
+                      {checklist.collection.url ? (
                         <a
                           className="text-link"
-                          href={checklist.kobo_project_url}
+                          href={checklist.collection.url}
                           target="_blank"
                           rel="noreferrer"
                         >
                           <ExternalLink className="size-4" />
-                          {t("Open in KoBo")}
+                          {t("Open collection service")}
                         </a>
                       ) : null}
                     </div>
@@ -186,7 +205,7 @@ export default function ChecklistsPage() {
                           disabled={
                             !checklist.xlsform ||
                             deploy.isPending ||
-                            checklist.kobo_deployment_status === "deploying"
+                            checklist.collection.status === "deploying"
                           }
                           onClick={() => {
                             deploy.reset();
@@ -220,7 +239,7 @@ export default function ChecklistsPage() {
         }}
         title={t("Deploy checklist?")}
         description={t(
-          "This will publish this checklist version to KoBo. Review the name and version before continuing.",
+          "This will publish this checklist version to collection service. Review the name and version before continuing.",
         )}
         showCloseButton={!deploy.isPending}
         contentProps={{

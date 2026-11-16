@@ -66,3 +66,14 @@ class ChecklistMetadata(APIView):
             return Response(read_checklist_metadata(upload.name, upload.read()))
         except XlsFormError as exc:
             raise ValidationError({"xlsform": str(exc)}) from exc
+
+
+class ChecklistDownload(APIView):
+    def get(self, request, pk):
+        from django.http import FileResponse
+        from pathlib import Path
+        from rest_framework.exceptions import NotFound
+        checklist = inspections.get_checklist(request.user, pk)
+        if not checklist.xlsform:
+            raise NotFound("No XLSForm uploaded.")
+        return FileResponse(checklist.xlsform.open("rb"), as_attachment=True, filename=Path(checklist.xlsform.name).name)

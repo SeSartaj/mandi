@@ -1,18 +1,363 @@
+name: ${COMPOSE_PROJECT_NAME:-mandi}
+
+x-central-build: &central-build
+  # Populated by scripts/setup.sh (pinned release, with the server submodule).
+  context: ./deploy/runtime/central
+  args:
+    BUILDKIT_CONTEXT_KEEP_GIT_DIR: '1'
+x-log: &log
+  driver: local
+x-mandi-env: &mandi-env
+  DJANGO_DEBUG: '0'
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Run scripts/setup.sh}
+  DJANGO_ALLOWED_HOSTS: ${MANDI_DOMAIN:-mandi.localhost},localhost,127.0.0.1
+  # Include both forms: production browsers omit :443, local uses :8443.
+  CSRF_TRUSTED_ORIGINS: https://${MANDI_DOMAIN:-mandi.localhost},https://${MANDI_DOMAIN:-mandi.localhost}:${HTTPS_PORT:-8443}
+  POSTGRES_DB: mandi
+  POSTGRES_USER: mandi
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/setup.sh}
+  POSTGRES_HOST: mandi-db
+  POSTGRES_PORT: '5432'
+  DEMO_INTEGRATIONS: '0'
+  COLLECTION_PROVIDER: odk
+  ODK_BASE_URL: http://central-service:8383
+  ODK_PUBLIC_URL: ${PUBLIC_COLLECTION_URL:?Set PUBLIC_COLLECTION_URL in .env}
+  ODK_EMAIL: ${ODK_EMAIL:-mandi-service@example.invalid}
+  ODK_PASSWORD: ${ODK_PASSWORD:?Run scripts/setup.sh}
+  ODK_PROJECT_ID: ${ODK_PROJECT_ID:-1}
+  MANDI_ADMIN_USERNAME: ${MANDI_ADMIN_USERNAME:-admin}
+  MANDI_ADMIN_EMAIL: ${MANDI_ADMIN_EMAIL:-admin@example.invalid}
+  MANDI_ADMIN_PASSWORD: ${MANDI_ADMIN_PASSWORD:?Run scripts/setup.sh}
+  MANDI_SYNC_USERNAME: ${MANDI_SYNC_USERNAME:-}
+  COLLECTION_SYNC_INTERVAL: ${COLLECTION_SYNC_INTERVAL:-60}
+  LICENSING_BASE_URL: ${LICENSING_BASE_URL:-}
+  LICENSING_REGISTRATION_API_KEY: ${LICENSING_REGISTRATION_API_KEY:-}
+x-backend: &backend
+  build: ./mandi_backend
+  restart: unless-stopped
+  environment: *mandi-env
+  volumes: [mandi_media:/app/media]
+  networks: [mandi, collection]
+  depends_on:
+    mandi-init: {condition: service_completed_successfully}
+  healthcheck:
+    test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/', timeout=5)"]
+    interval: 5s
+    timeout: 8s
+    retries: 30
+    start_period: 15s
+  stop_grace_period: 45s
+  logging: *log
+x-web: &web
+  build: ./mandi_frontend
+  restart: unless-stopped
+  networks: [mandi, edge]
+  healthcheck:
+    test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1/']
+    interval: 5s
+    timeout: 5s
+    retries: 20
+  logging: *log
+
 services:
-  postgres:
-    image: postgres:17
+  mandi-db:
+    image: postgres:17.7-bookworm
+    restart: unless-stopped
     environment:
       POSTGRES_DB: mandi
       POSTGRES_USER: mandi
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-    ports:
-      - '127.0.0.1:5433:5432'
-    volumes:
-      - mandi_postgres:/var/lib/postgresql/data
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/setup.sh}
+    volumes: [mandi_postgres:/var/lib/postgresql/data]
+    networks: [mandi]
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U mandi']
+      test: [CMD-SHELL, pg_isready -U mandi -d mandi]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+    logging: *log
+  mandi-init:
+    image: mandi-backend:${RELEASE:-local}
+    build: ./mandi_backend
+    environment: *mandi-env
+    command: [sh, -ec, 'python manage.py migrate --noinput && python manage.py bootstrap_admin']
+    volumes: [mandi_media:/app/media]
+    networks: [mandi]
+    depends_on:
+      mandi-db: {condition: service_healthy}
+    restart: 'no'
+    logging: *log
+  backend-blue:
+    <<: *backend
+    image: mandi-backend:${BLUE_RELEASE:-local}
+  backend-green:
+    <<: *backend
+    image: mandi-backend:${GREEN_RELEASE:-local}
+  web-blue:
+    <<: *web
+    image: mandi-web:${BLUE_RELEASE:-local}
+    environment: {BACKEND_HOST: backend-blue}
+    depends_on:
+      backend-blue: {condition: service_healthy}
+  web-green:
+    <<: *web
+    image: mandi-web:${GREEN_RELEASE:-local}
+    environment: {BACKEND_HOST: backend-green}
+    depends_on:
+      backend-green: {condition: service_healthy}
+  worker:
+    <<: *backend
+    image: mandi-backend:${RELEASE:-local}
+    command: [python, manage.py, sync_collection]
+    healthcheck: {disable: true}
+
+  proxy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    ports:
+      - '${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:${HTTP_PORT:-8080}'
+      - '${BIND_ADDRESS:-127.0.0.1}:${HTTPS_PORT:-8443}:${HTTPS_PORT:-8443}'
+      - '${BIND_ADDRESS:-127.0.0.1}:${HTTPS_PORT:-8443}:${HTTPS_PORT:-8443}/udp'
+    environment:
+      MANDI_DOMAIN: ${MANDI_DOMAIN:-mandi.localhost}
+      ODK_DOMAIN: ${ODK_DOMAIN:-collect.localhost}
+      SYSADMIN_EMAIL: ${SYSADMIN_EMAIL:-admin@example.invalid}
+      HTTP_PORT: ${HTTP_PORT:-8080}
+      HTTPS_PORT: ${HTTPS_PORT:-8443}
+      TLS_ISSUER: ${TLS_ISSUER:-internal}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/runtime/routes:/etc/caddy/routes:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      edge:
+        aliases: ['${MANDI_DOMAIN:-mandi.localhost}']
+      central:
+        aliases: ['${ODK_DOMAIN:-collect.localhost}']
+    healthcheck:
+      test: [CMD-SHELL, 'test "$$TLS_ISSUER" != internal || test -s /data/caddy/pki/authorities/local/root.crt']
+      interval: 2s
+      timeout: 3s
+      retries: 40
+    logging: *log
+  public-ca:
+    image: caddy:2.10.2-alpine
+    entrypoint: /bin/sh
+    command: [-ec, 'if [ "$$TLS_ISSUER" = internal ]; then cp /source/caddy/pki/authorities/local/root.crt /certs/root.crt; else cp /etc/ssl/certs/ca-certificates.crt /certs/root.crt; fi; chmod 644 /certs/root.crt']
+    environment:
+      TLS_ISSUER: ${TLS_ISSUER:-internal}
+    volumes: [caddy_data:/source:ro, public_ca:/certs]
+    depends_on:
+      proxy: {condition: service_healthy}
+    restart: 'no'
+    network_mode: none
+    logging: *log
+
+  central-db:
+    image: postgres:14.24
+    restart: unless-stopped
+    shm_size: 512m
+    environment:
+      POSTGRES_USER: odk
+      POSTGRES_DB: odk
+      POSTGRES_PASSWORD: ${ODK_DB_PASSWORD:?Run scripts/setup.sh}
+    volumes: [central_postgres:/var/lib/postgresql/data]
+    networks:
+      central:
+        aliases: [postgres14]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U odk -d odk]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+    logging: *log
+  central-secrets:
+    image: mandi-central-secrets:${CENTRAL_VERSION:-2026.3.1}
+    build:
+      <<: *central-build
+      dockerfile: secrets.dockerfile
+    command: ./generate-secrets.sh
+    volumes: [central_secrets:/etc/secrets]
+    networks: [central]
+    restart: 'no'
+    logging: *log
+  central-pyxform:
+    image: ghcr.io/getodk/pyxform-http:v4.5.0
+    restart: unless-stopped
+    networks:
+      central:
+        aliases: [pyxform]
+    logging: *log
+  central-mail:
+    image: registry.gitlab.com/egos-tech/smtp:2.0.7
+    restart: unless-stopped
+    environment:
+      MAILNAME: ${ODK_DOMAIN:-collect.localhost}
+      DKIM_KEY_PATH: /etc/exim4/dkim.key.temp
+    volumes: [./deploy/central/rsa.private:/etc/exim4/dkim.key.temp:ro]
+    networks:
+      central:
+        aliases: [mail]
+    logging: *log
+  central-service:
+    image: mandi-central-service:${CENTRAL_VERSION:-2026.3.1}
+    build:
+      <<: *central-build
+      dockerfile: service.dockerfile
+    command: [bash, /opt/mandi/start-central.sh]
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${ODK_DOMAIN:-collect.localhost}
+      SYSADMIN_EMAIL: ${SYSADMIN_EMAIL:-admin@example.invalid}
+      HTTPS_PORT: ${HTTPS_PORT:-8443}
+      PGHOST: central-db
+      PGDATABASE: odk
+      PGUSER: odk
+      PGPASSWORD: ${ODK_DB_PASSWORD:?Run scripts/setup.sh}
+      PGAPPNAME: odkcentral
+      DB_POOL_SIZE: '10'
+      EMAIL_FROM: no-reply@${ODK_DOMAIN:-collect.localhost}
+      EMAIL_HOST: ${ODK_EMAIL_HOST:-central-mail}
+      EMAIL_PORT: ${ODK_EMAIL_PORT:-25}
+      EMAIL_SECURE: ${ODK_EMAIL_SECURE:-false}
+      EMAIL_IGNORE_TLS: ${ODK_EMAIL_IGNORE_TLS:-true}
+      EMAIL_USER: ${ODK_EMAIL_USER:-}
+      EMAIL_PASSWORD: ${ODK_EMAIL_PASSWORD:-}
+      OIDC_ENABLED: 'false'
+      OIDC_ISSUER_URL: ''
+      OIDC_CLIENT_ID: ''
+      OIDC_CLIENT_SECRET: ''
+      SENTRY_ORG_SUBDOMAIN: ''
+      SENTRY_KEY: ''
+      SENTRY_PROJECT: ''
+      SENTRY_TRACE_RATE: '0'
+      S3_SERVER: ''
+      S3_ACCESS_KEY: ''
+      S3_SECRET_KEY: ''
+      S3_BUCKET_NAME: ''
+      SESSION_LIFETIME: '86400'
+      NODE_EXTRA_CA_CERTS: /etc/mandi-ca/root.crt
+      ODK_ADMIN_EMAIL: ${ODK_ADMIN_EMAIL:-admin@example.invalid}
+      ODK_ADMIN_PASSWORD: ${ODK_ADMIN_PASSWORD:?Run scripts/setup.sh}
+      ODK_EMAIL: ${ODK_EMAIL:-mandi-service@example.invalid}
+      ODK_PASSWORD: ${ODK_PASSWORD:?Run scripts/setup.sh}
+      ODK_PROJECT_ID: ${ODK_PROJECT_ID:-1}
+      CENTRAL_PUBLIC_URL: ${PUBLIC_COLLECTION_URL:?Set PUBLIC_COLLECTION_URL in .env}
+    volumes:
+      - central_secrets:/etc/secrets
+      - public_ca:/etc/mandi-ca:ro
+      - ./deploy/central/start-central.sh:/opt/mandi/start-central.sh:ro
+      - ./deploy/central/bootstrap.mjs:/opt/mandi/bootstrap.mjs:ro
+      - ./deploy/central/account-task.cjs:/opt/mandi/account-task.cjs:ro
+      - ./deploy/central/config.json.template:/usr/share/odk/config.json.template:ro
+    networks:
+      central:
+        aliases: [service]
+      collection:
+    depends_on:
+      central-db: {condition: service_healthy}
+      central-secrets: {condition: service_completed_successfully}
+      central-mail: {condition: service_started}
+      central-pyxform: {condition: service_started}
+      central-enketo: {condition: service_started}
+      public-ca: {condition: service_completed_successfully}
+    healthcheck:
+      # The readiness file proves bootstrap finished; a TCP probe avoids noisy
+      # unauthenticated 401 requests in Central's access log.
+      test: [CMD, node, -e, "if(!require('fs').existsSync('/tmp/mandi-central-ready'))process.exit(1);const s=require('net').connect(8383,'127.0.0.1');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));s.setTimeout(5000,()=>{s.destroy();process.exit(1)});"]
+      interval: 5s
+      timeout: 8s
+      start_period: 60s
+      retries: 60
+    stop_grace_period: 45s
+    logging: *log
+  central-web:
+    image: mandi-central-web:${CENTRAL_VERSION:-2026.3.1}
+    build:
+      <<: *central-build
+      dockerfile: nginx.dockerfile
+      args:
+        BUILDKIT_CONTEXT_KEEP_GIT_DIR: '1'
+        FRONTEND_BUILD_MODE: fetch
+        FRONTEND_VERSION: v${CENTRAL_VERSION:-2026.3.1}
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${ODK_DOMAIN:-collect.localhost}
+      CERTBOT_EMAIL: ${SYSADMIN_EMAIL:-admin@example.invalid}
+      SSL_TYPE: upstream
+      OIDC_ENABLED: 'false'
+      SENTRY_ORG_SUBDOMAIN: ''
+      SENTRY_KEY: ''
+      SENTRY_PROJECT: ''
+      SENTRY_DSN_FRONTEND: ''
+    volumes:
+      - ./deploy/central/odk.conf.template:/usr/share/odk/nginx/odk.conf.template:ro
+      - ./deploy/central/client-config.json.template:/usr/share/odk/nginx/client-config.json.template:ro
+    networks: [central, edge]
+    depends_on:
+      central-service: {condition: service_healthy}
+      central-enketo: {condition: service_started}
+    healthcheck:
+      test: [CMD-SHELL, nc -z localhost 80]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 30
+    logging: *log
+  central-enketo:
+    image: mandi-central-enketo:${CENTRAL_VERSION:-2026.3.1}
+    build:
+      <<: *central-build
+      dockerfile: enketo.dockerfile
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${ODK_DOMAIN:-collect.localhost}
+      SUPPORT_EMAIL: ${SYSADMIN_EMAIL:-admin@example.invalid}
+      HTTPS_PORT: ${HTTPS_PORT:-8443}
+      NODE_EXTRA_CA_CERTS: /etc/mandi-ca/root.crt
+    volumes: [central_secrets:/etc/secrets, public_ca:/etc/mandi-ca:ro]
+    networks:
+      central:
+        aliases: [enketo]
+    depends_on:
+      central-secrets: {condition: service_completed_successfully}
+      central-redis-main: {condition: service_started}
+      central-redis-cache: {condition: service_started}
+      public-ca: {condition: service_completed_successfully}
+    logging: *log
+  central-redis-main:
+    image: redis:8.10.1
+    restart: unless-stopped
+    volumes:
+      - ./deploy/central/redis-main.conf:/usr/local/etc/redis/redis.conf:ro
+      - central_redis_main:/data
+    command: [redis-server, /usr/local/etc/redis/redis.conf]
+    networks:
+      central:
+        aliases: [enketo_redis_main]
+    logging: *log
+  central-redis-cache:
+    image: redis:8.10.1
+    restart: unless-stopped
+    volumes: [./deploy/central/redis-cache.conf:/usr/local/etc/redis/redis.conf:ro, central_redis_cache:/data]
+    command: [redis-server, /usr/local/etc/redis/redis.conf]
+    networks:
+      central:
+        aliases: [enketo_redis_cache]
+    logging: *log
+
+networks:
+  mandi:
+  collection:
+  central:
+  edge:
 volumes:
-  mandi_postgres:
+  # Stable names keep data intact if the Compose project name changes.
+  mandi_postgres: {name: mandi-postgres}
+  mandi_media: {name: mandi-media}
+  central_postgres: {name: mandi-central-postgres}
+  central_secrets: {name: mandi-central-secrets}
+  central_redis_main: {name: mandi-central-redis-main}
+  central_redis_cache: {name: mandi-central-redis-cache}
+  caddy_data: {name: mandi-caddy-data}
+  caddy_config: {name: mandi-caddy-config}
+  public_ca: {name: mandi-public-ca}

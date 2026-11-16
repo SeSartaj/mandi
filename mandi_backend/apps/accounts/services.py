@@ -2,13 +2,13 @@ from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
+from rest_framework.authtoken.models import Token
 from rest_framework.exceptions import (
     AuthenticationFailed,
     PermissionDenied,
     ValidationError,
 )
-from rest_framework.authtoken.models import Token
-from django.db import transaction
 
 
 def require(actor, permission):
@@ -83,3 +83,66 @@ def require_checklist_access(actor, checklist_id):
         return
     if not actor.allowed_checklists.filter(pk=checklist_id).exists():
         raise PermissionDenied("You do not have access to this checklist.")
+
+
+@transaction.atomic
+def update_employee(actor, pk, data):
+    from django.shortcuts import get_object_or_404
+
+    from apps.inspections.models import Checklist
+    from apps.integrations.models import CollectorGrant
+
+    require(actor, "accounts.change_user")
+    user = get_object_or_404(get_user_model().objects.select_for_update(), pk=pk)
+    if user.is_superuser and not actor.is_superuser:
+        raise PermissionDenied("Only a superuser can manage another superuser.")
+    if user.pk == actor.pk and (
+        data.get("is_active") is False
+        or "group_ids" in data
+        or "checklist_ids" in data
+        or "restrict_checklist_access" in data
+    ):
+        raise ValidationError("Ask another administrator to change your own access.")
+    if (
+        any(
+            key in data
+            for key in ("is_active", "checklist_ids", "restrict_checklist_access")
+        )
+        and CollectorGrant.objects.filter(user=user, active=True).exists()
+    ):
+        raise ValidationError(
+            "Revoke this employee's collection access before changing their account or checklist access."
+        )
+    for key in ("display_name", "position", "is_active", "restrict_checklist_access"):
+        if key in data:
+            setattr(user, key, data[key])
+    if "password" in data:
+        try:
+            validate_password(data["password"], user)
+        except DjangoValidationError as exc:
+            raise ValidationError({"password": exc.messages}) from exc
+        user.set_password(data["password"])
+    if "group_ids" in data:
+        groups = list(
+            Group.objects.filter(pk__in=data["group_ids"], name__startswith="Mandi ")
+        )
+        if len(groups) != len(set(data["group_ids"])):
+            raise ValidationError(
+                {"group_ids": "Select known Mandi permission groups."}
+            )
+        user.groups.set(groups)
+    if "checklist_ids" in data:
+        checklists = list(
+            scope_checklists(
+                actor, Checklist.objects.filter(pk__in=data["checklist_ids"])
+            )
+        )
+        if len(checklists) != len(set(data["checklist_ids"])):
+            raise ValidationError(
+                {"checklist_ids": "Select accessible, known checklists."}
+            )
+        user.allowed_checklists.set(checklists)
+    user.save()
+    if "password" in data or not user.is_active:
+        Token.objects.filter(user=user).delete()
+    return user

@@ -30,6 +30,7 @@ INSTALLED_APPS = [
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -125,3 +126,24 @@ LOGGING = {
 LICENSING_BASE_URL = os.getenv("LICENSING_BASE_URL", "")
 LICENSING_REGISTRATION_API_KEY = os.getenv("LICENSING_REGISTRATION_API_KEY", "")
 LICENSING_TIMEOUT = float(os.getenv("LICENSING_TIMEOUT", "15"))
+
+# Collection services remain optional: Mandi starts and serves records during outages.
+COLLECTION_PROVIDER = os.getenv("COLLECTION_PROVIDER", "kobo")
+ODK_BASE_URL = os.getenv("ODK_BASE_URL", "http://central-service:8383")
+ODK_PUBLIC_URL = os.getenv("ODK_PUBLIC_URL", "")
+ODK_PROJECT_ID = os.getenv("ODK_PROJECT_ID", "1")
+ODK_EMAIL = os.getenv("ODK_EMAIL", "")
+ODK_PASSWORD = os.getenv("ODK_PASSWORD", "")
+ODK_TIMEOUT = float(os.getenv("ODK_TIMEOUT", "90"))
+STATIC_ROOT = BASE_DIR / "staticfiles"
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if os.getenv("CSRF_TRUSTED_ORIGINS") else []
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
+SECURE_SSL_REDIRECT = not DEBUG
+SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
+
+COLLECTION_PROJECT_ID = os.getenv("COLLECTION_PROJECT_ID", ODK_PROJECT_ID)

@@ -1,3 +1,5 @@
+import { EmployeeAccess } from "./EmployeeAccess";
+import { Button } from "@/components/ui/button";
 import { CreateButton } from "@/components/public/ActionButton";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -22,6 +24,7 @@ export default function EmployeesPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useTablePageSize();
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Employee | null>(null);
   const data = useApiQuery<Page<Employee>>(["employees"], "/employees/", {
     page,
     page_size: pageSize,
@@ -67,6 +70,7 @@ export default function EmployeesPage() {
                 <TableHead>{t("Username")}</TableHead>
                 <TableHead>{t("Position")}</TableHead>
                 <TableHead>{t("Status")}</TableHead>
+                <TableHead>{t("Actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -80,11 +84,18 @@ export default function EmployeesPage() {
                       {t(employee.is_active ? "Active" : "Inactive")}
                     </Badge>
                   </TableCell>
+                  <TableCell>
+                    <Can permission="accounts.change_user">
+                      <Button variant="outline" onClick={() => setEditing(employee)}>
+                        {t("Manage")}
+                      </Button>
+                    </Can>
+                  </TableCell>
                 </TableRow>
               ))}
               {rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
+                  <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
                     {t("No records found.")}
                   </TableCell>
                 </TableRow>
@@ -93,6 +104,18 @@ export default function EmployeesPage() {
           </AppTable>
         )}
       </PageSection>
+
+      <AppDialog
+        open={Boolean(editing)}
+        onOpenChange={(value) => {
+          if (!value) setEditing(null);
+        }}
+        title={t("Manage employee")}
+        size="md"
+        contentClassName="max-h-[90vh] overflow-y-auto"
+      >
+        {editing && <EmployeeAccess key={editing.id} employee={editing} />}
+      </AppDialog>
 
       <AppDialog
         open={open}

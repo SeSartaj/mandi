@@ -1,16 +1,16 @@
 from unittest.mock import patch
 
-from django.test import TestCase
-from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Permission
-from rest_framework.test import APIClient
-
 from apps.establishments.services import save_establishment
 from apps.inspections.models import Checklist
 from apps.integrations.models import KoboSubmission
 from apps.integrations.services import sync_kobo_submissions
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
+from django.test import TestCase, override_settings
+from rest_framework.test import APIClient
 
 
+@override_settings(COLLECTION_PROVIDER="kobo")
 class SubmissionBrowserTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
@@ -202,6 +202,7 @@ class SubmissionBrowserTests(TestCase):
 
     def test_attachment_connection_closes_when_stream_is_interrupted(self):
         from unittest.mock import Mock
+
         from config.api.submissions import attachment_chunks
 
         upstream = Mock()

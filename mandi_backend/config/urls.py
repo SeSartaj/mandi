@@ -5,14 +5,32 @@ from django.urls import path
 from django.http import JsonResponse
 from . import api
 from .schema import Schema
+from .api.checklists import ChecklistDownload
+from .api.accounts import EmployeeDetail
+from .api.collection import CollectionSync, CollectionSubmissions, CollectionSubmissionDetail, CollectorAccess, CollectionAttachment
 
 
 def health(request):
+    from django.db import connection
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+    except Exception:
+        return JsonResponse({"status": "unavailable"}, status=503)
     return JsonResponse({"status": "ok", "service": "mandi"})
 
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("api/v1/checklists/<int:pk>/download/", ChecklistDownload.as_view()),
+    path("api/v1/employees/<int:pk>/", EmployeeDetail.as_view()),
+    path("api/v1/employees/<int:pk>/collection-access/", CollectorAccess.as_view()),
+    path("api/v1/integrations/collection/sync/", CollectionSync.as_view()),
+    path("api/v1/integrations/establishments.csv", api.KoboEstablishmentsCsv.as_view()),
+    path("api/v1/checklists/<int:pk>/collection-submissions/", CollectionSubmissions.as_view()),
+    path("api/v1/establishments/<uuid:establishment_pk>/collection-submissions/", CollectionSubmissions.as_view()),
+    path("api/v1/collection-submissions/<int:pk>/attachments/<int:index>/", CollectionAttachment.as_view()),
+    path("api/v1/collection-submissions/<int:pk>/", CollectionSubmissionDetail.as_view()),
     path("api/health/", health),
     path("api/v1/schema/", Schema.as_view()),
 ]

@@ -145,7 +145,11 @@ def link_kobo_asset(actor, pk, asset_uid):
 
 
 def deploy_checklist(actor, pk):
-    """Upload the XLSForm to KoBo and deploy it as a survey."""
+    """Deploy through the configured collection provider."""
+    from django.conf import settings
+    if settings.COLLECTION_PROVIDER != "kobo":
+        from apps.integrations.collection import deploy
+        return deploy(actor, pk)
     require(actor, "inspections.deploy_checklist")
     require_checklist_access(actor, pk)
     try:

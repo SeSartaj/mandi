@@ -1,21 +1,72 @@
-# Running the Mandi review build
+# Running Mandi locally
 
 The initial local review milestone is implemented. KoBo, survey, archive, and licensing are not connected to live systems. The demo command creates synthetic records and source adapters explicitly identify their records as demonstrations.
 
-## Start locally
+## Full local stack (Mandi + ODK Central)
 
-Run commands from the repository root. Python 3.12+ and Node 24+ are recommended for this setup.
+Run commands from the repository root. You need Docker Engine with the Compose plugin, Git, and Python 3 for the setup helper. The same `compose.yml` is used locally and in production; only `.env` changes.
+
+```bash
+./scripts/setup.sh      # generates secrets and clones the pinned Central release
+./scripts/deploy.sh     # builds, migrates, and starts the whole stack
+```
+
+Open:
+
+- Mandi: https://mandi.localhost:8443 — sign in as `MANDI_ADMIN_USERNAME` with `MANDI_ADMIN_PASSWORD` from `.env`.
+- Central: https://collect.localhost:8443 — sign in as `ODK_ADMIN_EMAIL` with `ODK_ADMIN_PASSWORD` from `.env`.
+- ODK Collect server URL: the credential shown once under **Employees → Manage → ODK Collect access**. The device must resolve `collect.localhost` and trust the local CA.
+
+### Phone on the same LAN
+
+ODK Collect trusts only Android system certificate authorities, so it cannot use
+the internal CA. To demo on a phone connected to the same network, configure an
+HTTP endpoint for Central:
+
+```dotenv
+BIND_ADDRESS=0.0.0.0
+ODK_DOMAIN=10.10.6.25
+PUBLIC_COLLECTION_URL=http://10.10.6.25:8080
+LAN_HTTP_HOST=10.10.6.25
+```
+
+Then run `./scripts/setup.sh` and `./scripts/deploy.sh`, and issue a new collector
+credential. The URL will start with `http://10.10.6.25:8080/v1/key/...`.
+`PUBLIC_COLLECTION_URL` is the base URL Central puts in form lists, manifests, and
+attachment links; `LAN_HTTP_HOST` controls the optional plain-HTTP Caddy route.
+Leave `LAN_HTTP_HOST` empty in production. HTTP is unencrypted and is only for a
+trusted local demonstration network.
+
+`*.localhost` resolves to `127.0.0.1` in current browsers. For command-line verification, trust the generated certificate:
+
+```bash
+./scripts/local-ca.sh
+curl --cacert deploy/runtime/local-ca.crt https://mandi.localhost:8443/api/health/
+```
+
+On Ubuntu, `./scripts/local-ca.sh` also prints the `update-ca-certificates` commands. Firefox may need to import the CA under **Settings → Certificates → Authorities**. Do not use the local CA in production.
+
+Stop the stack without deleting data:
+
+```bash
+docker compose stop
+```
+
+Reset all local data deliberately (this deletes both databases and uploads):
+
+```bash
+docker compose down -v
+rm -rf deploy/runtime/central backups/*
+```
+
+## Backend-only development with SQLite
+
+For quick backend or frontend iteration without Central, use Python and Vite directly. Python 3.12+ and Node 24+ are recommended.
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r mandi_backend/requirements.txt
-cp mandi_backend/.env.example mandi_backend/.env
-```
-
-Choose your database password in `mandi_backend/.env`, then start the local PostgreSQL service:
-
-```bash
-docker compose --env-file mandi_backend/.env up -d postgres
+cp mandi_backend/.env.example mandi_backend/.env   # omit POSTGRES_DB for SQLite
 .venv/bin/python mandi_backend/manage.py migrate
 MANDI_DEMO_PASSWORD='choose-your-local-review-password' .venv/bin/python mandi_backend/manage.py seed_demo
 .venv/bin/python mandi_backend/manage.py runserver 127.0.0.1:8000
@@ -30,23 +81,15 @@ npm --prefix mandi_frontend run dev -- --host 127.0.0.1
 
 Open http://127.0.0.1:5174 and sign in as `reviewer`, using the password supplied to `seed_demo`. Existing account passwords are not reset when seeding again. The frontend API defaults to `/api/v1` on the frontend origin. Vite proxies `/api` and `/media` to Django at `127.0.0.1:8000`, so browsers on other devices do not call their own localhost. Override `VITE_API_URL` in `mandi_frontend/.env` for a separate API host; production hosting must forward `/api` and `/media` to Django. The backend loads its `.env` automatically; process environment variables take precedence.
 
-Optional: omit `POSTGRES_DB` from the backend environment to use SQLite for a quick development review. PostgreSQL is required when `DJANGO_DEBUG=0`. No production deployment has been performed.
+PostgreSQL is required when `DJANGO_DEBUG=0`. The database-only Compose file used by earlier review builds has been removed; use the full stack above for PostgreSQL and ODK collection.
 
 ## Database connection refused
 
-If `runserver` passes system checks but reports `connection refused` on
-`127.0.0.1:5433`, the local PostgreSQL service is stopped or unavailable.
-From the repository root, run:
-
-```bash
-docker compose --env-file mandi_backend/.env up -d --wait postgres
-.venv/bin/python mandi_backend/manage.py migrate --check
-```
-
-Compose needs `--env-file` because the database credentials live in the backend
-folder. Check `docker compose --env-file mandi_backend/.env ps -a` and, if the
-service fails to start, its `logs postgres`. Starting `runserver` does not start
-PostgreSQL. The Compose database uses host port `5433` and container port `5432`.
+If `runserver` passes system checks but reports `connection refused`, the local
+PostgreSQL service is stopped or unavailable. The full stack does not publish
+PostgreSQL to the host; start the stack with `./scripts/deploy.sh` and use the
+containerized backend, or omit `POSTGRES_DB` from `mandi_backend/.env` to use
+SQLite for backend-only work.
 
 ## Review walkthrough
 
@@ -195,10 +238,11 @@ Tests create and destroy a separate test database. The local PostgreSQL developm
 
 ## Stop local services
 
-Stop the two development servers with Ctrl-C. To stop PostgreSQL while preserving its data:
+Stop the two development servers with Ctrl-C. To stop the full container stack
+while preserving data:
 
 ```bash
-docker compose --env-file mandi_backend/.env stop postgres
+docker compose stop
 ```
 
 ## Verification recorded on 2026-11-07

@@ -14,7 +14,7 @@ from rest_framework import serializers
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = get_user_model()
-        fields = ("id", "username", "display_name", "position", "is_active", "is_staff")
+        fields = ("id", "username", "display_name", "position", "is_active", "is_staff", "groups", "restrict_checklist_access", "allowed_checklists")
 
 
 class EmployeeInput(serializers.Serializer):
@@ -71,6 +71,18 @@ class EstablishmentSerializer(serializers.ModelSerializer):
 class ChecklistSerializer(serializers.ModelSerializer):
     kobo_project_url = serializers.SerializerMethodField()
     submission_count = serializers.SerializerMethodField()
+    collection = serializers.SerializerMethodField()
+
+    def get_collection(self, obj):
+        from apps.integrations.collection import deployment_url
+        if settings.COLLECTION_PROVIDER == "kobo":
+            return {"provider": "kobo", "form_id": obj.kobo_asset_uid, "status": obj.kobo_deployment_status,
+                    "error": obj.kobo_deployment_error, "deployed_at": obj.kobo_deployed_at, "url": self.get_kobo_project_url(obj)}
+        deployment = obj.deployments.filter(provider=settings.COLLECTION_PROVIDER).first()
+        if not deployment:
+            return {"provider": settings.COLLECTION_PROVIDER, "form_id": "", "status": "not_deployed", "error": "", "deployed_at": None, "url": None}
+        return {"provider": deployment.provider, "form_id": deployment.form_id, "status": deployment.status,
+                "error": deployment.error, "deployed_at": deployment.deployed_at, "url": deployment_url(deployment)}
 
     class Meta:
         model = Checklist
@@ -85,6 +97,9 @@ class ChecklistSerializer(serializers.ModelSerializer):
         return f"{host.rstrip('/')}/#/forms/{obj.kobo_asset_uid}"
 
     def get_submission_count(self, obj):
+        if settings.COLLECTION_PROVIDER != "kobo":
+            from apps.integrations.models import CollectionSubmission
+            return CollectionSubmission.objects.filter(deployment__checklist=obj).count()
         count = getattr(obj, "submission_count", None)
         return count if count is not None else obj.kobo_submissions.count()
 
@@ -247,3 +262,13 @@ class SubmissionFilters(serializers.Serializer):
                 {"date_to": "The end date must be on or after the start date."}
             )
         return data
+
+
+class EmployeeUpdate(serializers.Serializer):
+    display_name = serializers.CharField(max_length=200, required=False)
+    position = serializers.CharField(max_length=200, allow_blank=True, required=False)
+    password = serializers.CharField(write_only=True, trim_whitespace=False, required=False)
+    is_active = serializers.BooleanField(required=False)
+    group_ids = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)
+    restrict_checklist_access = serializers.BooleanField(required=False)
+    checklist_ids = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False)

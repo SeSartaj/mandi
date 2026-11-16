@@ -64,7 +64,7 @@ export default function SubmissionDetailPage() {
   const { id } = useParams();
   const submission = useApiQuery<KoboSubmission>(
     ["kobo-submission", id],
-    `/kobo-submissions/${id}/`,
+    `/collection-submissions/${id}/`,
   );
 
   const answers = useMemo(() => submission.data?.answers ?? [], [submission.data?.answers]);
@@ -126,7 +126,7 @@ export default function SubmissionDetailPage() {
           data.kobo_url ? (
             <a className="text-link" href={data.kobo_url} target="_blank" rel="noreferrer">
               <ExternalLink className="size-4" />
-              {t("Open in KoBo")}
+              {t("Open collection service")}
             </a>
           ) : null
         }

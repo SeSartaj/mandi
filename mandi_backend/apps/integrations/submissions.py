@@ -370,3 +370,19 @@ def _is_internal(name):
     if name in META_KEYS or name in COMPUTED_KEYS or name.startswith("meta/"):
         return True
     return name.startswith(SECTION_SCORE_PREFIXES)
+
+
+def flatten_answers(value, prefix=""):
+    result = {}
+    for key, item in value.items():
+        if key.startswith("__") or key == "_attachments":
+            continue
+        path = f"{prefix}/{key}" if prefix else key
+        if isinstance(item, dict) and item.get("type") != "Point":
+            result.update(flatten_answers(item, path))
+        elif isinstance(item, dict) and item.get("type") == "Point":
+            coords = item.get("coordinates", [])
+            result[path] = [coords[1], coords[0]] if len(coords) >= 2 else []
+        else:
+            result[path] = item
+    return result

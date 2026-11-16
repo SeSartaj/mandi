@@ -100,11 +100,11 @@ export default function EstablishmentDetailPage() {
   );
   const koboSubmissions = useApiQuery<Page<KoboSubmission>>(
     ["kobo-submissions", id],
-    `/establishments/${id}/kobo-submissions/`,
+    `/establishments/${id}/collection-submissions/`,
     { page: koboPage, page_size: koboPageSize },
   );
   const syncKobo = useMutation({
-    mutationFn: () => api.post("/integrations/kobo/sync/", { establishment_id: id }),
+    mutationFn: () => api.post("/integrations/collection/sync/", { establishment_id: id }),
     onSettled: () => client.invalidateQueries({ queryKey: ["kobo-submissions", id] }),
   });
 
@@ -195,7 +195,7 @@ export default function EstablishmentDetailPage() {
               onClick={() => syncKobo.mutate()}
             >
               <RefreshCw />
-              {syncKobo.isPending ? t("Syncing…") : t("Sync from KoBo")}
+              {syncKobo.isPending ? t("Syncing…") : t("Sync submissions")}
             </Button>
           </Can>
         }
@@ -270,8 +270,8 @@ export default function EstablishmentDetailPage() {
                           href={submission.kobo_url}
                           target="_blank"
                           rel="noreferrer"
-                          title={t("Open in KoBo")}
-                          aria-label={t("Open in KoBo")}
+                          title={t("Open collection service")}
+                          aria-label={t("Open collection service")}
                         >
                           <ExternalLink className="size-4" />
                         </a>
@@ -283,7 +283,7 @@ export default function EstablishmentDetailPage() {
               {koboCount === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
-                    {t("No KoBo submissions yet. Press Sync from KoBo to pull new forms.")}
+                    {t("No Collection submissions yet. Press Sync submissions to pull new forms.")}
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -320,7 +320,7 @@ export default function EstablishmentDetailPage() {
                   rel="noreferrer"
                 >
                   <ExternalLink className="size-4" />
-                  {t("Open in KoBo")}
+                  {t("Open collection service")}
                 </a>
               ) : null}
             </div>

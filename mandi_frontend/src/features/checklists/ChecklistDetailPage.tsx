@@ -66,7 +66,7 @@ export default function ChecklistDetailPage() {
   });
   const submissions = useApiQuery<Page<KoboSubmission>>(
     ["checklist-submissions", id],
-    `/checklists/${id}/submissions/`,
+    `/checklists/${id}/collection-submissions/`,
     {
       search: debouncedSearch,
       establishment_id: establishmentId,
@@ -80,7 +80,7 @@ export default function ChecklistDetailPage() {
 
   const sync = useMutation({
     mutationFn: async () =>
-      (await api.post("/integrations/kobo/sync/", { checklist_id: Number(id) })).data,
+      (await api.post("/integrations/collection/sync/", { checklist_id: Number(id) })).data,
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["checklist-submissions", id] });
       client.invalidateQueries({ queryKey: ["checklist", id] });
@@ -88,7 +88,7 @@ export default function ChecklistDetailPage() {
   });
   const runSync = sync.mutate;
   const autoSynced = useRef<string | undefined>(undefined);
-  const deployed = checklist.data?.kobo_deployment_status === "deployed";
+  const deployed = checklist.data?.collection.status === "deployed";
 
   useEffect(() => {
     if (autoSynced.current === id || !canSync || !deployed) return;
@@ -123,30 +123,25 @@ export default function ChecklistDetailPage() {
             <span>{data.version}</span>
             <span>·</span>
             <span>{t(choiceLabel(data.establishment_kind))}</span>
-            <DeploymentBadge status={data.kobo_deployment_status} />
+            <DeploymentBadge status={data.collection.status} />
           </span>
         }
         others={
           <div className="inline-actions">
-            {data.kobo_project_url ? (
-              <a
-                className="text-link"
-                href={data.kobo_project_url}
-                target="_blank"
-                rel="noreferrer"
-              >
+            {data.collection.url ? (
+              <a className="text-link" href={data.collection.url} target="_blank" rel="noreferrer">
                 <ExternalLink className="size-4" />
-                {t("Open in KoBo")}
+                {t("Open collection service")}
               </a>
             ) : null}
             <Can permission="inspections.add_inspection">
               <Button
                 variant="outline"
-                disabled={sync.isPending || !data.kobo_asset_uid}
+                disabled={sync.isPending || !data.collection.form_id}
                 onClick={() => runSync()}
               >
                 <RefreshCw />
-                {sync.isPending ? t("Syncing…") : t("Sync from KoBo")}
+                {sync.isPending ? t("Syncing…") : t("Sync submissions")}
               </Button>
             </Can>
           </div>
@@ -161,7 +156,7 @@ export default function ChecklistDetailPage() {
 
       <PageSection
         title={t("Submissions")}
-        description={t("Every KoBo submission received for this checklist.")}
+        description={t("Submissions received for this checklist.")}
       >
         <div className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
@@ -289,7 +284,7 @@ export default function ChecklistDetailPage() {
                     <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
                       {filtersActive
                         ? t("No submissions match these filters.")
-                        : t("No submissions yet. Press Sync from KoBo to pull new forms.")}
+                        : t("No submissions yet. Press Sync submissions to pull new forms.")}
                     </TableCell>
                   </TableRow>
                 ) : null}

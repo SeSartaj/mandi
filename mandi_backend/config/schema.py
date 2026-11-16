@@ -3,7 +3,9 @@
 from rest_framework.response import Response
 from rest_framework.schemas.openapi import AutoSchema
 from rest_framework.views import APIView
+
 from . import api
+from .api.serializers import EmployeeUpdate
 
 
 def openapi_document():
@@ -11,6 +13,7 @@ def openapi_document():
     classes = [
         api.LoginInput,
         api.EmployeeInput,
+        EmployeeUpdate,
         api.UserSerializer,
         api.EstablishmentSerializer,
         api.SourceLinkSerializer,
@@ -287,7 +290,7 @@ def openapi_document():
     route(
         "/checklists/{pk}/deploy/",
         "post",
-        "Upload and deploy the checklist XLSForm to KoBo",
+        "Upload and deploy the checklist XLSForm to the configured collection provider",
         ref("ChecklistSerializer"),
     )
     route(
@@ -354,12 +357,89 @@ def openapi_document():
         },
         query=True,
     )
+    route(
+        "/employees/{pk}/",
+        "patch",
+        "Update employee profile, password, groups, or checklist access",
+        ref("UserSerializer"),
+        ref("EmployeeUpdate"),
+    )
+    route(
+        "/employees/{pk}/collection-access/",
+        "get",
+        "List active collector grants",
+        array({"type": "object"}),
+    )
+    route(
+        "/employees/{pk}/collection-access/",
+        "post",
+        "Provision one form credential; configuration is returned once",
+        {"type": "object"},
+        {
+            "type": "object",
+            "required": ["checklist_id"],
+            "properties": {"checklist_id": {"type": "integer"}},
+        },
+        code=201,
+    )
+    route(
+        "/employees/{pk}/collection-access/",
+        "delete",
+        "Revoke remote collector credential before disabling local access",
+        body={
+            "type": "object",
+            "required": ["grant_id"],
+            "properties": {"grant_id": {"type": "integer"}},
+        },
+        code=204,
+    )
+    route(
+        "/integrations/collection/sync/",
+        "post",
+        "Import provider submissions and normalized inspection summaries",
+        {"type": "object"},
+        {"type": "object", "properties": {"checklist_id": {"type": "integer"}}},
+    )
+    route(
+        "/checklists/{pk}/collection-submissions/",
+        "get",
+        "Provider-neutral checklist submissions",
+        page({"type": "object"}),
+        query=True,
+    )
+    route(
+        "/establishments/{pk}/collection-submissions/",
+        "get",
+        "Provider-neutral establishment submissions",
+        page({"type": "object"}),
+    )
+    route(
+        "/collection-submissions/{pk}/",
+        "get",
+        "Submission answers, scores, and protected attachment references",
+        {"type": "object"},
+    )
+    route(
+        "/collection-submissions/{pk}/attachments/{index}/",
+        "get",
+        "Stream an authorized collection attachment",
+    )
+    route(
+        "/checklists/{pk}/download/",
+        "get",
+        "Download original XLSForm with checklist authorization",
+    )
+    route(
+        "/integrations/establishments.csv",
+        "get",
+        "Download establishment choices for XLSForms",
+    )
     return {
         "openapi": "3.0.3",
         "info": {
-            "title": "Mandi review API",
+            "title": "Mandi API",
             "version": "0.1.0",
-            "description": "Local review milestone. Live providers and final approval policies are pending.",
+            "description": "Mandi records, account management, XLSForm deployment, and provider-neutral collection workflows.",
         },
         "servers": [{"url": "/api/v1"}],
         "components": {

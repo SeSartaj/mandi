@@ -65,6 +65,9 @@ export type Employee = {
   position: string;
   is_active: boolean;
   is_staff: boolean;
+  groups: number[];
+  restrict_checklist_access: boolean;
+  allowed_checklists: number[];
 };
 export type Session = { user: Employee; permissions: string[] };
 export type Page<T> = { count: number; next: string | null; previous: string | null; results: T[] };
@@ -124,6 +127,14 @@ export type Checklist = {
   version: string;
   establishment_kind: string;
   xlsform: string | null;
+  collection: {
+    provider: string;
+    form_id: string;
+    status: "not_deployed" | "deploying" | "deployed" | "failed";
+    error: string;
+    deployed_at: string | null;
+    url: string | null;
+  };
   kobo_asset_uid: string;
   kobo_project_url?: string | null;
   kobo_deployment_status: "not_deployed" | "deploying" | "deployed" | "failed";

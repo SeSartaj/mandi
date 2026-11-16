@@ -60,3 +60,9 @@ class Employees(APIView):
             ).data,
             status=201,
         )
+
+
+class EmployeeDetail(APIView):
+    def patch(self, request, pk):
+        from .serializers import EmployeeUpdate
+        return Response(UserSerializer(accounts.update_employee(request.user, pk, validated(EmployeeUpdate, request.data))).data)

@@ -1,3 +1,36 @@
+# Mandi with ODK Central
+
+Mandi manages establishments, employees, XLSForm checklists, inspection review,
+and reporting. ODK Central runs independently and supplies collection through
+an authenticated API; provider references are separate from Mandi records.
+
+The same `compose.yml` runs Mandi and ODK Central locally and on an Ubuntu
+server. Locally:
+
+```bash
+./scripts/setup.sh      # local defaults and the pinned Central checkout
+./scripts/deploy.sh     # builds and starts the whole stack
+```
+
+Then open https://mandi.localhost:8443 and https://collect.localhost:8443.
+
+On a production server, run `./scripts/setup.sh --production`, edit `.env` with
+your two domains and email addresses, then run the same deploy command:
+
+```bash
+./scripts/deploy.sh                  # first deployment and Mandi releases
+./scripts/deploy.sh --with-central   # deliberate Central upgrade
+./scripts/rollback.sh                # previous Mandi release
+```
+
+See [deployment and operations](docs/deployment.md) for prerequisites, initial
+credentials, collection access, backups, provider mapping, and downtime limits.
+See [local development](docs/development.md) for the full local stack and for
+backend-only development. The original product notes below describe the earlier
+KoBo plan; ODK is now the default provider in the deployment.
+
+---
+
 # Monitoring and Inspection System 
 Monitoring and Inspection system will help AFDA overcome this problem: the inspection process is manual and ad hoc, the data is not collected properly, and their is favoritism and corruption in how an food or drug establishment is inspected. 
 

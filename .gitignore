@@ -42,3 +42,8 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Deployment state, backups, and upstream Central checkout
+/deploy/runtime/
+/deploy/.deploy.lock
+/backups/

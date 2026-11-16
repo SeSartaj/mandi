@@ -100,9 +100,11 @@ def disconnect_source(actor, pk, source):
         link.delete()
 
 
-def establishment_choice_csv(limit=None):
+def establishment_choice_csv(limit=None, kind=None):
     """CSV consumed by an XLSForm select_one_from_file establishments.csv."""
     qs = Establishment.objects.order_by("-updated_at")
+    if kind:
+        qs = qs.filter(kind=kind)
     if limit:
         qs = qs[:limit]
     buffer = io.StringIO()

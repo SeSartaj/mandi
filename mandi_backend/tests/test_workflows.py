@@ -1,32 +1,32 @@
 from datetime import date
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Permission
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
-from rest_framework.test import APIClient
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from apps.establishments.models import SourceLink
 from apps.establishments.services import (
-    save_establishment,
     connect_source,
     disconnect_source,
+    save_establishment,
 )
-from apps.establishments.models import SourceLink
 from apps.inspections.models import Checklist, Inspection
-from apps.integrations.kobo import KoboError
-from apps.integrations.models import KoboSubmission
-from apps.integrations.services import sync_kobo_submissions
 from apps.inspections.services import (
     approve_inspection,
     deploy_checklist,
     ingest_inspection,
     save_checklist,
 )
+from apps.integrations.kobo import KoboError
+from apps.integrations.models import KoboSubmission
+from apps.integrations.services import sync_kobo_submissions
 from apps.reporting.services import coverage
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.test import APIClient
 
 
-@override_settings(DEMO_INTEGRATIONS=True, LICENSING_BASE_URL="")
+@override_settings(DEMO_INTEGRATIONS=True, LICENSING_BASE_URL="", COLLECTION_PROVIDER="kobo")
 class WorkflowTests(TestCase):
     def setUp(self):
         self.manager = get_user_model().objects.create_user(
@@ -179,9 +179,8 @@ class WorkflowTests(TestCase):
         with patch(
             "apps.inspections.services.deploy_checklist_to_kobo",
             side_effect=KoboError("KoBo rejected the form"),
-        ):
-            with self.assertRaises(ValidationError):
-                deploy_checklist(self.manager, checklist.pk)
+        ), self.assertRaises(ValidationError):
+            deploy_checklist(self.manager, checklist.pk)
 
         checklist.refresh_from_db()
         self.assertEqual(checklist.kobo_deployment_status, "failed")
