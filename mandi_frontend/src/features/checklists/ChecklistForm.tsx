@@ -1,3 +1,4 @@
+import { useEstablishmentKinds } from "@/features/establishments/registry";
 import { FieldSupport } from "@/components/ui/field-support";
 import { CancelButton, SaveButton } from "@/components/public/ActionButton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -12,7 +13,7 @@ import CustomFileInput from "@/components/ui/custom/CustomFileInput";
 import CustomForm from "@/components/ui/custom/CustomForm";
 import FormInput from "@/components/ui/custom/CustomInput";
 import FormSelect from "@/components/ui/custom/CustomSelect";
-import { choiceLabel, establishmentKinds } from "@/features/shared/labels";
+import { choiceLabel } from "@/features/shared/labels";
 import type { Checklist } from "@/lib/api";
 import { api, errorMessage, fileUrl } from "@/lib/api";
 
@@ -32,6 +33,7 @@ export default function ChecklistForm({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const establishmentKinds = useEstablishmentKinds();
   const client = useQueryClient();
   const form = useForm<ChecklistValues>({
     defaultValues: {

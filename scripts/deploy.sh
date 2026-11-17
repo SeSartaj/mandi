@@ -66,8 +66,8 @@ if [[ "${TLS_ISSUER:-internal}" == internal ]]; then ./scripts/local-ca.sh; fi
 if ! public_check --fail --silent --show-error --retry 12 --retry-delay 2 --connect-timeout 5 --max-time 10 "$(public_url "$MANDI_DOMAIN")/api/health/"; then
   rollback_route; exit 1
 fi
-# Reuse the candidate backend image for the single worker.
-if ! dc up -d --no-deps worker; then rollback_route; exit 1; fi
+# Reuse the candidate backend image for both independent sync workers.
+if ! dc up -d --no-deps worker registry-worker; then rollback_route; exit 1; fi
 save_release
 [[ -z "$old_slot" ]] || printf '%s %s\n' "$old_slot" "$old_release" > deploy/runtime/previous
 printf '%s %s\n' "$SLOT" "$RELEASE" > deploy/runtime/active

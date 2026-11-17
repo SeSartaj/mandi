@@ -100,11 +100,14 @@ class ChecklistMetadataTests(SimpleTestCase):
     def test_missing_settings_uses_filename_without_guessing_type_or_version(self):
         self.assertEqual(self.metadata(), {"name": "Checklist", "code": "", "version": ""})
 
-    def test_empty_settings_and_unknown_kind(self):
+    def test_empty_settings_and_invalid_kind(self):
         self.assertEqual(self.metadata([])["name"], "Checklist")
         self.assertNotIn("establishment_kind", self.metadata([
-            ["form_title", "establishment_kind"], ["Title", "unknown"],
+            ["form_title", "establishment_kind"], ["Title", "invalid type!"],
         ]))
+
+    def test_custom_type_metadata_is_supported(self):
+        self.assertEqual(self.metadata([["establishment_kind"], ["laboratory"]])["establishment_kind"], "laboratory")
 
     def test_invalid_file_is_a_readable_error(self):
         from apps.integrations.xlsform import read_checklist_metadata

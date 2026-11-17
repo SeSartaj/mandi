@@ -4,6 +4,8 @@ from django.conf.urls.static import static
 from django.urls import path
 from django.http import JsonResponse
 from . import api
+from .api.establishments import NearbyEstablishments, RegistryCatalog, RegistryImport, RegistryRefresh, RegistryOwnership, RegistrySyncStatus
+from .api.registry_evidence import InspectionEvidenceView
 from .schema import Schema
 from .api.checklists import ChecklistDownload
 from .api.accounts import EmployeeDetail
@@ -21,6 +23,13 @@ def health(request):
 
 
 urlpatterns = [
+    path("api/v1/establishments/nearby/", NearbyEstablishments.as_view()),
+    path("api/v1/registry/sync/", RegistrySyncStatus.as_view()),
+    path("api/v1/inspections/<int:pk>/evidence/", InspectionEvidenceView.as_view()),
+    path("api/v1/registry/", RegistryCatalog.as_view()),
+    path("api/v1/registry/import/", RegistryImport.as_view()),
+    path("api/v1/establishments/<uuid:pk>/refresh/", RegistryRefresh.as_view()),
+    path("api/v1/establishments/<uuid:pk>/ownership/", RegistryOwnership.as_view()),
     path("admin/", admin.site.urls),
     path("api/v1/checklists/<int:pk>/download/", ChecklistDownload.as_view()),
     path("api/v1/employees/<int:pk>/", EmployeeDetail.as_view()),

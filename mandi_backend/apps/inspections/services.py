@@ -313,9 +313,38 @@ def ingest_inspection(actor, data):
             return get_inspection(actor, obj.pk)
         obj.approved = False
         obj.approved_by = obj.approved_at = None
+        if obj.establishment_id != establishment.pk:
+            from apps.establishments.services import identity_snapshot
+            obj.establishment_snapshot = identity_snapshot(establishment)
         for key_name, value in payload.items():
             setattr(obj, key_name, value)
         obj.updated_by = actor
         obj.save()
     obj.team.set(team)
     return get_inspection(actor, obj.pk)
+
+
+@transaction.atomic
+def capture_evidence(actor, pk, source, selected_fields):
+    """Append only the explicitly selected, server-fetched source fields."""
+    require(actor, "inspections.change_inspection")
+    from apps.integrations.services import source_detail
+    from .models import InspectionEvidence
+    inspection = get_inspection(actor, pk)
+    inspection = Inspection.objects.select_for_update().get(pk=inspection.pk)
+    Establishment.objects.select_for_update().get(pk=inspection.establishment_id)
+    detail = source_detail(actor, inspection.establishment_id, source, include_sensitive=False)
+    available = {}
+    for section in detail.get("sections", []):
+        for field in section.get("fields", []):
+            available[field["id"]] = {"section": section["title"], **field}
+    if not selected_fields or any(key not in available for key in selected_fields):
+        raise ValidationError({"selected_fields": "Select fields from the current source detail."})
+    link = inspection.establishment.source_links.get(source=source)
+    evidence = InspectionEvidence.objects.create(inspection=inspection, source=source,
+        external_id=link.external_id, fields=[available[key] for key in dict.fromkeys(selected_fields)], captured_by=actor)
+    inspection.approved = False
+    inspection.approved_by = inspection.approved_at = None
+    inspection.updated_by = actor
+    inspection.save(update_fields=["approved", "approved_by", "approved_at", "updated_by", "updated_at"])
+    return evidence

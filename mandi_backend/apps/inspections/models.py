@@ -17,7 +17,7 @@ class Checklist(BaseModel):
     name = models.CharField(max_length=250)
     version = models.CharField(max_length=100)
     establishment_kind = models.CharField(
-        max_length=20, choices=Establishment.Kind.choices
+        max_length=20
     )
     xlsform = models.FileField(
         upload_to="checklists/xlsforms/",
@@ -49,6 +49,13 @@ class Checklist(BaseModel):
         ]
         permissions = [("deploy_checklist", "Can deploy checklists to KoBo")]
 
+    def clean(self):
+        from apps.establishments.models import EstablishmentType
+        from django.core.exceptions import ValidationError
+        super().clean()
+        if not EstablishmentType.objects.filter(pk=self.establishment_kind, is_active=True).exists():
+            raise ValidationError({"establishment_kind": "Select an active establishment type."})
+
     def __str__(self):
         return f"{self.name} ({self.version})"
 
@@ -72,6 +79,14 @@ class Inspection(BaseModel):
     submission_id = models.CharField(max_length=200)
     mapping_version = models.CharField(max_length=100)
     summary = models.JSONField(default=dict)
+    establishment_snapshot = models.JSONField(default=dict, editable=False)
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.establishment_snapshot:
+            from apps.establishments.services import identity_snapshot
+            self.establishment_snapshot = identity_snapshot(self.establishment)
+        super().save(*args, **kwargs)
+
     approved = models.BooleanField(default=False)
     approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -112,3 +127,15 @@ class Inspection(BaseModel):
                 name="approval_metadata_consistent",
             ),
         ]
+
+
+class InspectionEvidence(models.Model):
+    inspection = models.ForeignKey(Inspection, on_delete=models.PROTECT, related_name="evidence")
+    source = models.CharField(max_length=20)
+    external_id = models.CharField(max_length=200)
+    fields = models.JSONField()
+    captured_at = models.DateTimeField(auto_now_add=True)
+    captured_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+
+    class Meta:
+        ordering = ["captured_at", "pk"]

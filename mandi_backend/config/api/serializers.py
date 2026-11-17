@@ -44,11 +44,15 @@ class SourceLinkSerializer(serializers.ModelSerializer):
             "is_demo",
             "linked_by",
             "linked_at",
+            "is_primary",
+            "last_synced_at",
         )
 
 
 class EstablishmentSerializer(serializers.ModelSerializer):
+    province = serializers.CharField(max_length=100, allow_blank=False, required=True)
     source_links = SourceLinkSerializer(many=True, read_only=True)
+    primary_source = serializers.ReadOnlyField()
 
     class Meta:
         model = Establishment
@@ -60,8 +64,14 @@ class EstablishmentSerializer(serializers.ModelSerializer):
             "province",
             "district",
             "address",
+            "latitude",
+            "longitude",
             "phone",
             "source_links",
+            "primary_source",
+            "attributes",
+            "license_number",
+            "status",
             "created_at",
             "updated_at",
         )
@@ -160,7 +170,10 @@ class KoboSubmissionSerializer(serializers.ModelSerializer):
 
 
 class InspectionSerializer(serializers.ModelSerializer):
-    establishment_name = serializers.CharField(source="establishment.name")
+    establishment_name = serializers.SerializerMethodField()
+
+    def get_establishment_name(self, obj):
+        return obj.establishment_snapshot.get("name") or obj.establishment.name
     checklist = ChecklistSerializer()
     team = UserSerializer(many=True)
     approved_by = UserSerializer()
@@ -180,6 +193,7 @@ class InspectionSerializer(serializers.ModelSerializer):
             "submission_id",
             "mapping_version",
             "summary",
+            "establishment_snapshot",
             "approved",
             "approved_by",
             "approved_at",
@@ -226,9 +240,7 @@ class Filters(serializers.Serializer):
     kind = serializers.CharField(required=False, allow_blank=True)
     province = serializers.CharField(required=False, allow_blank=True)
     district = serializers.CharField(required=False, allow_blank=True)
-    establishment_kind = serializers.ChoiceField(
-        choices=Establishment.Kind.values, required=False
-    )
+    establishment_kind = serializers.CharField(max_length=20, required=False)
     establishment_id = serializers.UUIDField(required=False)
     checklist_id = serializers.IntegerField(min_value=1, required=False)
     inspector_id = serializers.IntegerField(min_value=1, required=False)

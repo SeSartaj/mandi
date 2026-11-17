@@ -1,3 +1,4 @@
+import InspectionEvidence from "./InspectionEvidence";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -66,6 +67,7 @@ export default function InspectionDetailPage() {
       {approve.error ? <AppErrorState message={errorMessage(approve.error)} /> : null}
       {inspection.is_demo ? <Badge variant="secondary">{t("Demonstration data")}</Badge> : null}
 
+      <InspectionEvidence inspection={inspection} />
       <PageSection title={t("Details")} contentClassName="pt-4">
         <dl className="info-grid">
           <div>

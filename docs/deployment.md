@@ -7,7 +7,7 @@ only over Central's authenticated HTTP API. Neither application reads the other'
 database. An outage of Central does not prevent Mandi login or reporting.
 
 `compose.yml` is the only stack definition. It runs both applications in one
-Compose project: Mandi (PostgreSQL, Django, React, background sync worker, Caddy)
+Compose project: Mandi (PostgreSQL, Django, React, collection and registry sync workers, Caddy)
 and ODK Central (PostgreSQL 14, service, nginx, Enketo, pyxform, mail, Redis,
 secrets). Caddy terminates HTTPS for both hostnames. Only Caddy publishes ports.
 
@@ -270,3 +270,5 @@ checks passed; and Mandi-only plus full backups were produced. Public DNS/TLS
 issuance on a real server and collection from a physical device still need an
 acceptance run. Django's optional HSTS subdomain/preload advisories remain;
 deployment checks fail on errors, without requiring either policy.
+
+See [registry configuration and testing](registry-and-evidence.md) to enable automatic establishment creation and identity refresh from the Registration API. Both workers are included in the same Compose project and updated by `scripts/deploy.sh`.

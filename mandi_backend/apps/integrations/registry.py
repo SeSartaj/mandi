@@ -1,0 +1,94 @@
+"""External registry adapters. Credentials and HTTP contracts belong in code/config."""
+from django.conf import settings
+from rest_framework.exceptions import ValidationError
+from . import licensing
+
+
+class LicensingAdapter:
+    def list_applications(self, category, filters):
+        return licensing.list_applications(category, filters)
+
+    def get_application(self, category, application_id):
+        return licensing.get_application(category, application_id)
+
+    def list_page(self, kind, page, page_size):
+        return self.list_applications(self.category(kind), {"page": page, "page_size": page_size, "ordering": "created_at"})
+
+    @staticmethod
+    def category(kind):
+        category = licensing.KIND_CATEGORIES.get(kind)
+        if not category:
+            raise ValidationError("Licensing does not support this establishment type.")
+        return category
+
+    def search(self, kind, search="", page=1, page_size=20):
+        category = self.category(kind)
+        payload = self.list_applications(category, {"search": search, "page": page, "page_size": page_size})
+        records = payload if isinstance(payload, list) else payload["results"]
+        return {"is_demo": False,
+                "count": len(records) if isinstance(payload, list) else payload.get("count", len(records)),
+                "has_next": False if isinstance(payload, list) else bool(payload.get("next")),
+                "results": [licensing.candidate(category, record) for record in records]}
+
+    def _record(self, kind, external_id):
+        category = self.category(kind)
+        prefix, separator, application_id = external_id.partition(":")
+        if not separator or prefix != category:
+            raise ValidationError({"external_id": "Select a Licensing record in the matching category."})
+        return category, self.get_application(category, application_id)
+
+    def identity(self, kind, external_id):
+        category, record = self._record(kind, external_id)
+        return licensing.candidate(category, record)
+
+    def details(self, kind, external_id, include_sensitive=False):
+        category, record = self._record(kind, external_id)
+        return licensing.application_details(category, record, include_sensitive=include_sensitive)
+
+
+class RegistrationAdapter(LicensingAdapter):
+    """Same documented application contract, independently configured origin/key."""
+    def connection(self):
+        if not settings.REGISTRATION_BASE_URL or not settings.REGISTRATION_API_KEY:
+            raise ValidationError("The Registration connection is not configured.")
+        return (settings.REGISTRATION_BASE_URL, settings.REGISTRATION_API_KEY, settings.REGISTRATION_TIMEOUT)
+
+    def list_applications(self, category, filters):
+        return licensing.list_applications(category, filters, connection=self.connection())
+
+    def get_application(self, category, application_id):
+        return licensing.get_application(category, application_id, connection=self.connection())
+
+
+ADAPTERS = {"licensing": LicensingAdapter(), "registration": RegistrationAdapter()}
+
+
+def licensing_uses_registration():
+    return (not settings.DEMO_INTEGRATIONS and not licensing.configured()
+            and bool(settings.REGISTRATION_BASE_URL and settings.REGISTRATION_API_KEY))
+
+
+def canonical_source(source):
+    return "registration" if source == "licensing" and licensing_uses_registration() else source
+
+
+def adapter_for(source):
+    source = canonical_source(source)
+    from apps.establishments.models import ExternalSystem
+    system = ExternalSystem.objects.filter(pk=source, is_active=True).first()
+    if not system:
+        raise ValidationError({"source": "Unknown or inactive external system."})
+    adapter = ADAPTERS.get(system.adapter)
+    if system.adapter == "licensing" and not licensing.configured():
+        return None
+    return adapter
+
+
+def detail_with_field_ids(detail):
+    import hashlib
+    import json
+    for section in detail.get("sections", []):
+        for field in section.get("fields", []):
+            payload = [section["title"], field["label"], field.get("value")]
+            field["id"] = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    return detail

@@ -1,3 +1,5 @@
+import SourceDetails, { type SourceDetail } from "./SourceDetails";
+import { useApiQuery } from "@/features/shared/api";
 import { CancelButton } from "@/components/public/ActionButton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
@@ -28,14 +30,22 @@ export default function SourcePanel({
   establishment,
   source,
   title,
+  searchable = true,
 }: {
   establishment: Establishment;
   source: string;
   title: string;
+  searchable?: boolean;
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
   const link = establishment.source_links.find((item) => item.source === source);
+  const detail = useApiQuery<SourceDetail>(
+    ["source-detail", establishment.id, source],
+    `/establishments/${establishment.id}/sources/${source}/`,
+    {},
+    { enabled: !!link },
+  );
   const [disconnecting, setDisconnecting] = useState(false);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -84,19 +94,17 @@ export default function SourcePanel({
                 {String(link.details.name || establishment.name)} · {t("View details")}
               </Link>
             </Can>
-            <dl className="details-list">
-              {Object.entries(link.details).map(([key, value]) => (
-                <div key={key}>
-                  <dt>{key.replaceAll("_", " ")}</dt>
-                  <dd>{String(value)}</dd>
-                </div>
-              ))}
-            </dl>
-            <small className="muted">ID: {link.external_id}</small>
+            <small className="muted">
+              ID: {link.external_id}
+              {link.is_primary ? " · Primary registry" : ""}
+              {link.last_synced_at
+                ? ` · Synced ${new Date(link.last_synced_at).toLocaleString()}`
+                : ""}
+            </small>
             <Can permission="establishments.change_sourcelink">
               <Button
                 variant="outline"
-                disabled={mutation.isPending}
+                disabled={mutation.isPending || link.is_primary}
                 onClick={() => {
                   mutation.reset();
                   setDisconnecting(true);
@@ -108,14 +116,36 @@ export default function SourcePanel({
           </>
         ) : (
           <>
-            <p className="muted">{t("This source is not linked.")}</p>
-            <Can permission="establishments.change_sourcelink">
-              <Button variant="outline" onClick={() => setOpen(true)}>
-                <Plus />
-                {t("Connect")}
-              </Button>
-            </Can>
+            <p className="muted">
+              {t(
+                establishment.primary_source && !searchable
+                  ? "No reference to this source was supplied by Licensing."
+                  : "This source is not linked.",
+              )}
+            </p>
+            {searchable && (
+              <Can permission="establishments.change_sourcelink">
+                <Button variant="outline" onClick={() => setOpen(true)}>
+                  <Plus />
+                  {t("Connect")}
+                </Button>
+              </Can>
+            )}
           </>
+        )}
+        {link && (
+          <div className="pt-2">
+            {detail.isPending && <AppLoader label={t("Loading source details…")} />}
+            {detail.error && (
+              <div role="alert" className="rounded border p-4">
+                <p>{errorMessage(detail.error)}</p>
+                <Button variant="outline" onClick={() => detail.refetch()}>
+                  {t("Retry")}
+                </Button>
+              </div>
+            )}
+            {detail.data && <SourceDetails data={detail.data} />}
+          </div>
         )}
         {mutation.error ? (
           <AppErrorState message={errorMessage(mutation.error)} className="border-0 shadow-none" />

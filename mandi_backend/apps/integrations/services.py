@@ -13,7 +13,6 @@ from apps.inspections.models import Checklist
 
 from .kobo import KoboError, fetch_submissions, get_asset, open_attachment
 from .models import KoboSubmission
-from . import licensing
 from .submissions import (
     form_schema,
     submission_attachments,
@@ -32,14 +31,11 @@ def _utc(value):
 
 def source_candidates(actor, source, kind, search="", page=1, page_size=20):
     require(actor, "establishments.view_sourcelink")
-    if source not in SourceLink.Source.values:
-        raise ValidationError({"source": "Unknown source system."})
-    if source == "licensing" and licensing.configured():
-        category = licensing.KIND_CATEGORIES[kind]
-        payload = licensing.list_applications(category, {"search": search, "page": page, "page_size": page_size})
-        records = payload if isinstance(payload, list) else payload["results"]
-        return [licensing.candidate(category, record) for record in records]
-    if not settings.DEMO_INTEGRATIONS:
+    from .registry import adapter_for
+    adapter = adapter_for(source)
+    if adapter:
+        return adapter.search(kind, search, page, page_size)["results"]
+    if not settings.DEMO_INTEGRATIONS or source not in {"survey", "archive", "licensing"}:
         raise ValidationError(
             "This source is not connected. Configure a live adapter before use."
         )
@@ -71,13 +67,14 @@ def source_candidates(actor, source, kind, search="", page=1, page_size=20):
 
 
 def source_record(actor, source, external_id, kind):
-    if source == "licensing" and licensing.configured():
-        require(actor, "establishments.view_sourcelink")
-        category = licensing.KIND_CATEGORIES[kind]
-        prefix, separator, application_id = external_id.partition(":")
-        if not separator or prefix != category:
-            raise ValidationError({"external_id": "Select a Licensing record in the matching category."})
-        return licensing.candidate(category, licensing.get_application(category, application_id))
+    require(actor, "establishments.view_sourcelink")
+    from .registry import adapter_for
+    adapter = adapter_for(source)
+    if adapter:
+        record = adapter.identity(kind, external_id)
+        if str(record.get("id")) != external_id:
+            raise ValidationError("The registry returned a different external ID. The mapping was not changed.")
+        return record
     for record in source_candidates(actor, source, kind):
         if record["id"] == external_id:
             return record
@@ -228,39 +225,59 @@ def sync_kobo_submissions(actor, establishment_id=None, checklist_id=None):
 
 def source_search(actor, source, kind, search="", page=1, page_size=20):
     require(actor, "establishments.view_sourcelink")
-    if source == "licensing" and licensing.configured():
-        category = licensing.KIND_CATEGORIES[kind]
-        payload = licensing.list_applications(category, {"search": search, "page": page, "page_size": page_size})
-        records = payload if isinstance(payload, list) else payload["results"]
-        return {
-            "is_demo": False,
-            "count": len(records) if isinstance(payload, list) else payload.get("count", len(records)),
-            "has_next": False if isinstance(payload, list) else bool(payload.get("next")),
-            "results": [licensing.candidate(category, record) for record in records],
-        }
+    from .registry import adapter_for
+    adapter = adapter_for(source)
+    if adapter:
+        return adapter.search(kind, search, page, page_size)
     records = source_candidates(actor, source, kind, search)
     return {"is_demo": True, "count": len(records), "has_next": False, "results": records}
 
 
-def source_detail(actor, establishment_id, source):
+def source_detail(actor, establishment_id, source, include_sensitive=None):
     """Load current details for the record already linked to this establishment."""
     from apps.establishments.services import get_establishment
+    from .registry import canonical_source
+    source = canonical_source(source)
     require(actor, "establishments.view_sourcelink")
     establishment = get_establishment(actor, establishment_id)
     try:
         link = establishment.source_links.get(source=source)
     except SourceLink.DoesNotExist as exc:
         raise NotFound("This source is not linked.") from exc
-    if source != "licensing" or link.is_demo:
-        return {"name": link.details.get("name") or establishment.name,
+    from .registry import adapter_for, detail_with_field_ids
+    adapter = adapter_for(source)
+    include_sensitive = include_sensitive is not False and actor.has_perm("establishments.view_sensitive_source_details")
+    if adapter and not link.is_demo:
+        from .registry import LicensingAdapter
+        options = {"include_sensitive": include_sensitive} if isinstance(adapter, LicensingAdapter) else {}
+        detail = adapter.details(establishment.kind, link.external_id, **options)
+        # Store only business coordinates, never the full source profile.
+        if link.is_primary:
+            location = next((section["location"] for section in detail.get("sections", []) if section.get("location")), None)
+            details = {key: value for key, value in link.details.items() if key != "location"}
+            if location:
+                details["location"] = location
+            SourceLink.objects.filter(pk=link.pk).update(details=details)
+            from apps.establishments.models import Establishment
+            Establishment.objects.filter(pk=establishment.pk).update(
+                latitude=location["latitude"] if location else None,
+                longitude=location["longitude"] if location else None,
+            )
+        return detail_with_field_ids(detail)
+    if not link.is_demo and source in {"archive", "survey"}:
+        from . import licensing
+        primary = establishment.source_links.filter(source__in=["registration", "licensing"]).order_by("-is_primary").first()
+        if primary:
+            upstream = adapter_for(primary.source)
+            if upstream:
+                _, raw = upstream._record(establishment.kind, primary.external_id)
+                return detail_with_field_ids(licensing.related_details(raw, source, link.external_id, include_sensitive=include_sensitive))
+    if not link.is_demo:
+        raise ValidationError("This source is temporarily unavailable; the local establishment remains accessible.")
+    if link.is_demo:
+        return detail_with_field_ids({"name": link.details.get("name") or establishment.name,
                 "application_id": link.external_id, "is_demo": link.is_demo,
                 "sections": [{"title": "Source details", "fields": [
                     {"label": key.replace("_", " ").capitalize(), "value": value}
                     for key, value in link.details.items() if isinstance(value, (str, int, float, bool))
-                ]}]}
-    category = licensing.KIND_CATEGORIES[establishment.kind]
-    prefix, separator, application_id = link.external_id.partition(":")
-    if not separator or prefix != category:
-        raise ValidationError("Reconnect the Licensing record to load its details.")
-    record = licensing.get_application(category, application_id)
-    return licensing.application_details(category, record)
+                ]}]})

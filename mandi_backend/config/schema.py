@@ -125,6 +125,18 @@ def openapi_document():
                 )
         paths.setdefault(path, {})[method] = op
 
+    route("/registry/sync/", "get", "Automatic registry sync status and per-category progress", {"type": "object"})
+    route("/registry/", "get", "Active establishment types and external systems", {"type": "object"})
+    route("/registry/import/", "post", "Import an identity from its primary registry (idempotent by source and external ID)", ref("EstablishmentSerializer"),
+          {"type": "object", "required": ["source", "external_id", "kind"], "properties": {key: {"type": "string"} for key in ["source", "external_id", "kind"]}}, code=201)
+    route("/establishments/{pk}/refresh/", "post", "Refresh primary registry identity; local copy survives outages", ref("EstablishmentSerializer"))
+    route("/establishments/{pk}/ownership/", "post", "Transfer identity ownership (null source means Mandi)", ref("EstablishmentSerializer"),
+          {"type": "object", "required": ["source"], "properties": {"source": {"type": "string", "nullable": True}}})
+    route("/inspections/{pk}/evidence/", "get", "Historical selected external evidence", array({"type": "object"}))
+    route("/inspections/{pk}/evidence/", "post", "Capture selected current source fields and clear approval",
+          {"type": "object", "properties": {"id": {"type": "integer"}}},
+          {"type": "object", "required": ["source", "selected_fields"], "properties": {"source": {"type": "string"}, "selected_fields": array({"type": "string", "description": "Stable content hash from source detail fields requested with purpose=evidence; stale values are rejected"})}}, code=201)
+
     route(
         "/auth/login/",
         "post",

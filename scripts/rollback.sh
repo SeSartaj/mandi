@@ -24,6 +24,12 @@ if ! public_check --fail --silent --show-error "$(public_url "$MANDI_DOMAIN")/ap
   exit 1
 fi
 dc up -d --no-deps worker
+# Older releases predate the registry command; pause that worker on rollback.
+if dc run --rm --no-deps registry-worker python manage.py help sync_registries >/dev/null 2>&1; then
+  dc up -d --no-deps registry-worker
+else
+  dc stop registry-worker
+fi
 save_release
 cp deploy/runtime/active deploy/runtime/active.swap
 cp deploy/runtime/previous deploy/runtime/active

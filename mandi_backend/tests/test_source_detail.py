@@ -2,12 +2,13 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.establishments.models import Establishment, SourceLink
 
 
+@override_settings(LICENSING_BASE_URL="http://licensing.test", LICENSING_REGISTRATION_API_KEY="test-key")
 class SourceDetailTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="source-reader")

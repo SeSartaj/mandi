@@ -156,7 +156,7 @@ def read_checklist_metadata(filename, content):
         }
         # Establishment type is a Mandi extension, not a standard XLSForm setting.
         kind = metadata.get("establishment_kind", "").lower()
-        if kind in {"pharmacy", "wholesaler", "importer", "factory"}:
+        if kind and len(kind) <= 20 and all(char.isascii() and (char.isalnum() or char in "-_") for char in kind):
             result["establishment_kind"] = kind
         return result
     finally:

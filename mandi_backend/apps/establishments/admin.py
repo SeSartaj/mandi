@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Establishment, SourceLink
+from .models import Establishment, SourceLink, EstablishmentType, ExternalSystem, RegistrySyncCursor
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):
@@ -39,3 +39,32 @@ class SourceLinkAdmin(ReadOnlyAdmin):
     search_fields = ("establishment__name", "external_id")
     list_select_related = ("establishment", "linked_by")
 
+
+
+@admin.register(EstablishmentType)
+class EstablishmentTypeAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "is_active")
+    readonly_fields = ()
+
+    def get_readonly_fields(self, request, obj=None):
+        return ("code",) if obj else ()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ExternalSystem)
+class ExternalSystemAdmin(EstablishmentTypeAdmin):
+    list_display = ("code", "name", "adapter", "is_active")
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if "adapter" in form.base_fields:
+            from apps.integrations.registry import ADAPTERS
+            form.base_fields["adapter"].help_text = "Installed adapters: " + ", ".join(ADAPTERS) + ". Other codes are unavailable until implemented."
+        return form
+
+
+@admin.register(RegistrySyncCursor)
+class RegistrySyncCursorAdmin(ReadOnlyAdmin):
+    list_display = ("source", "kind", "next_page", "last_attempt_at", "last_success_at", "last_error")

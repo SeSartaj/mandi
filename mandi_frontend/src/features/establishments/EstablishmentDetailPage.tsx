@@ -1,3 +1,7 @@
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { DeferredMap } from "./SourceDetails";
+import { useRegistryCatalog } from "@/features/establishments/registry";
+import RegistryOwnership from "@/features/establishments/RegistryOwnership";
 import { EditButton } from "@/components/public/ActionButton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, RefreshCw } from "lucide-react";
@@ -78,6 +82,7 @@ function ScoreBar({ percent }: { percent: number | null }) {
 
 export default function EstablishmentDetailPage() {
   const { t } = useTranslation();
+  const catalog = useRegistryCatalog();
   const { id } = useParams();
   const client = useQueryClient();
   const { permissions } = useSession();
@@ -112,12 +117,16 @@ export default function EstablishmentDetailPage() {
   if (data.error)
     return <AppErrorState message={errorMessage(data.error)} onRetry={() => data.refetch()} />;
   const establishment = data.data!;
+  const location =
+    establishment.latitude != null && establishment.longitude != null
+      ? { latitude: establishment.latitude, longitude: establishment.longitude }
+      : null;
   const visitCount = visits.data?.count ?? 0;
   const koboCount = koboSubmissions.data?.count ?? 0;
 
   return (
     <div className="space-y-6">
-      <Link className="back-link" to="/establishments">
+      <Link className="back-link" to={`/establishments?kind=${establishment.kind}`}>
         <ArrowLeft size={16} />
         {t("Establishments")}
       </Link>
@@ -128,6 +137,7 @@ export default function EstablishmentDetailPage() {
           <Can permission="establishments.change_establishment">
             <EditButton
               variant="secondary"
+              disabled={!!establishment.primary_source}
               onClick={() => setEdit(true)}
               label={t("Edit details")}
             />
@@ -136,31 +146,63 @@ export default function EstablishmentDetailPage() {
       />
 
       <PageSection
-        title={t("Details")}
-        description={<code>{establishment.id}</code>}
+        title={t("Establishment overview")}
+        description={t(
+          establishment.primary_source
+            ? "Identity synced from Licensing. Source details are shown below."
+            : "Identity managed in Mandi.",
+        )}
         contentClassName="pt-4"
       >
         <dl className="info-grid">
-          {["subtype", "province", "district", "address", "phone"].map((key) => (
-            <div key={key}>
-              <dt>{t(key.charAt(0).toUpperCase() + key.slice(1))}</dt>
-              <dd>{(establishment[key as keyof Establishment] as string) || "—"}</dd>
-            </div>
-          ))}
+          {["subtype", "province", "district", "address", "phone", "license_number", "status"].map(
+            (key) => (
+              <div key={key}>
+                <dt>{t(key.charAt(0).toUpperCase() + key.slice(1))}</dt>
+                <dd>{(establishment[key as keyof Establishment] as string) || "—"}</dd>
+              </div>
+            ),
+          )}
         </dl>
+        {location && (
+          <div className="mt-4">
+            <DeferredMap location={location} />
+          </div>
+        )}
+        <details className="mt-4 border-t pt-4">
+          <summary className="cursor-pointer text-sm">
+            {t("Identity and source management")}
+          </summary>
+          <div className="mt-3">
+            <RegistryOwnership establishment={establishment} />
+          </div>
+        </details>
       </PageSection>
 
       <Can permission="establishments.view_sourcelink">
-        <h2 className="section-title">{t("Source systems")}</h2>
-        <div className="source-grid">
-          {[
-            ["survey", "Survey system"],
-            ["archive", "Archive system"],
-            ["licensing", "Licensing system"],
-          ].map(([source, title]) => (
-            <SourcePanel key={source} establishment={establishment} source={source} title={title} />
-          ))}
-        </div>
+        <PageSection title={t("Source systems")}>
+          {!!catalog.data?.systems.length && (
+            <Tabs defaultValue={catalog.data.systems[0].code}>
+              <TabsList aria-label={t("Source systems")}>
+                {catalog.data.systems.map(({ code, name }) => (
+                  <TabsTrigger key={code} value={code}>
+                    {t(name)}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              {catalog.data.systems.map(({ code, name, searchable }) => (
+                <TabsContent key={code} value={code}>
+                  <SourcePanel
+                    establishment={establishment}
+                    source={code}
+                    title={name}
+                    searchable={searchable}
+                  />
+                </TabsContent>
+              ))}
+            </Tabs>
+          )}
+        </PageSection>
       </Can>
       <Can permission="inspections.view_inspection">
         {visits.error ? (
@@ -185,8 +227,10 @@ export default function EstablishmentDetailPage() {
       </Can>
 
       <PageSection
-        title={t("KoBo inspections")}
-        description={t("Inspection forms submitted through KoBo for this establishment.")}
+        title={t("Collection submissions")}
+        description={t(
+          "Forms submitted for this establishment through the configured collection service.",
+        )}
         actions={
           <Can permission="inspections.add_inspection">
             <Button

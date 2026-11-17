@@ -1,4 +1,5 @@
 """Server-only Licensing API client and minimal Mandi source projections."""
+import math
 from urllib.parse import quote
 
 import requests
@@ -19,17 +20,18 @@ def configured():
     return bool(settings.LICENSING_BASE_URL and settings.LICENSING_REGISTRATION_API_KEY)
 
 
-def _request(category, suffix, params=None):
+def _request(category, suffix, params=None, *, connection=None):
     if category not in CATEGORIES:
         raise ValidationError({"category": "Unknown Licensing application category."})
-    if not configured():
+    base_url, api_key, timeout = connection or (settings.LICENSING_BASE_URL, settings.LICENSING_REGISTRATION_API_KEY, settings.LICENSING_TIMEOUT)
+    if not base_url or not api_key:
         raise LicensingError("The Licensing connection is not configured.")
-    url = f"{settings.LICENSING_BASE_URL.rstrip('/')}/api/applications/{category}/registration/{suffix}"
+    url = f"{base_url.rstrip('/')}/api/applications/{category}/registration/{suffix}"
     try:
         response = requests.get(url, params=params, headers={
-            "X-API-KEY": settings.LICENSING_REGISTRATION_API_KEY,
+            "X-API-KEY": api_key,
             "Accept": "application/json",
-        }, timeout=settings.LICENSING_TIMEOUT, allow_redirects=False)
+        }, timeout=timeout, allow_redirects=False)
     except requests.Timeout as exc:
         raise LicensingError("The Licensing service timed out. Try again.") from exc
     except requests.RequestException as exc:
@@ -51,22 +53,40 @@ def _request(category, suffix, params=None):
         response.close()
 
 
-def list_applications(category, filters=None):
+def list_applications(category, filters=None, *, connection=None):
     params = {key: value for key, value in (filters or {}).items() if key in FILTERS}
     params.setdefault("page_size", 20)
-    payload = _request(category, "list/", params)
+    payload = _request(category, "list/", params, connection=connection)
     if not isinstance(payload, (dict, list)) or (isinstance(payload, dict) and not isinstance(payload.get("results"), list)):
         raise LicensingError("The Licensing service returned an invalid list.")
     return payload
 
 
-def get_application(category, application_id):
+def get_application(category, application_id, *, connection=None):
     if not application_id or str(application_id) in {".", ".."}:
         raise ValidationError({"application_id": "An application ID is required."})
-    payload = _request(category, f"{quote(str(application_id), safe='')}/")
+    payload = _request(category, f"{quote(str(application_id), safe='')}/", connection=connection)
     if not isinstance(payload, dict) or not payload.get("application_id"):
         raise LicensingError("The Licensing service returned an invalid application.")
     return payload
+
+
+def readable_address(value):
+    if isinstance(value, dict):
+        return " · ".join(str(part) for part in value.values() if isinstance(part, (str, int, float)) and str(part).strip())
+    return str(value or "")
+
+
+def related_mappings(record):
+    mappings = {}
+    for source in ("archive", "survey"):
+        nested = record.get(source)
+        if source + "_id" in record or isinstance(nested, dict):
+            external_id = record.get(source + "_id")
+            if external_id is None and isinstance(nested, dict):
+                external_id = nested.get("id")
+            mappings[source] = str(external_id) if external_id is not None and str(external_id).strip() else None
+    return mappings
 
 
 def candidate(category, record):
@@ -76,59 +96,175 @@ def candidate(category, record):
         raise LicensingError("A Licensing record has no application ID.")
     address = record.get("address") or {}
     province = address.get("province") or {}
+    district = address.get("district") or {}
+    def location_name(value):
+        return (value.get("name_fa") or value.get("name_en") or value.get("name_ps") or "") if isinstance(value, dict) else str(value)
     details = {
         "category": category,
         "application_id": application_id,
         "name": record.get("name") or record.get("name_en") or application_id,
         "name_en": record.get("name_en") or "",
-        "province": province.get("name_fa") or province.get("name_en") or "",
+        "province": location_name(province),
+        "district": location_name(district),
+        "address": readable_address(address.get("address")),
         "license_number": record.get("aisa_license_number") or "",
     }
+    location = _location_section(address).get("location")
+    if location:
+        details["location"] = location
     if "application_status" in record:
         details["status"] = record.get("application_status") or ""
-    return {"id": f"{category}:{application_id}", "name": details["name"], "details": details, "is_demo": False}
+    return {"id": f"{category}:{application_id}", "name": details["name"], "details": details, "is_demo": False, "external_mappings": related_mappings(record)}
 
 
-def application_details(category, record):
-    """Explicit detail-page projection; identity documents and raw payloads stay upstream."""
-    def fields(data, keys):
-        return [{"label": label, "value": data.get(key)} for key, label in keys
-                if isinstance(data.get(key), (str, int, float, bool)) and data.get(key) != ""]
+# All operational fields are rendered recursively; personal identity documents stay upstream.
+_PRIVATE_KEYS = {"salary", "dob", "hr_code", "tin_number", "photo_attachment", "birth_province", "birth_district"}
 
-    sections = [{"title": "Application details", "fields": fields(record, [
-        ("name", "Name"), ("name_en", "English name"), ("application_id", "Application ID"),
-        ("application_status", "Application status"), ("application_step", "Application step"),
-        ("application_type", "Application type"), ("register_type", "Registration type"),
-        ("service_status", "Service status"), ("preferred_language", "Preferred language"),
-        ("pharmacy_type", "Pharmacy type"), ("grade", "Grade"), ("activity_domain", "Activity domain"),
-        ("is_llc", "Limited liability company"),
-    ])}]
-    address = record.get("address") or {}
-    location = fields(address, [("address", "Address"), ("latitude", "Latitude"), ("longitude", "Longitude"), ("long_lat", "Coordinates"), ("total_area", "Total area")])
-    for key, label in [("province", "Province"), ("district", "District")]:
-        value = address.get(key) or {}
-        if isinstance(value, dict):
-            value = value.get("name_fa") or value.get("name_en") or value.get("name_ps")
-        if isinstance(value, str) and value:
-            location.insert(0, {"label": label, "value": value})
-    sections.append({"title": "Location", "fields": location})
-    for key, title in [("applicant", "Applicant"), ("co_owner", "Co-owner")]:
-        person = record.get(key)
-        if isinstance(person, dict):
-            sections.append({"title": title, "fields": fields(person, [
-                ("first_name_fa", "First name"), ("last_name_fa", "Last name"),
-                ("first_name_en", "English first name"), ("last_name_en", "English last name"),
-                ("phone_number", "Phone"), ("email", "Email"),
-            ])})
-    sections.append({"title": "License details", "fields": fields(record, [
-        ("aisa_license_number", "AISA license number"), ("license_issue_date", "License issue date"),
-        ("license_expiry_date", "License expiry date"), ("issue_date", "Issue date"),
-        ("expiry_date", "Expiry date"), ("old_license_number", "Previous license number"),
-        ("old_license_issue_date", "Previous license issue date"),
-        ("environmental_permit_license_number", "Environmental permit number"),
-        ("environmental_permit_license_date", "Environmental permit date"),
-    ])})
-    sections.append({"title": "Record dates", "fields": fields(record, [("created_at", "Created at"), ("updated_at", "Updated at")])})
-    return {"name": record.get("name") or record.get("name_en") or record["application_id"],
+
+def _public_value(value):
+    if isinstance(value, dict):
+        return {key: _public_value(item) for key, item in value.items()
+                if key not in _PRIVATE_KEYS and not any(token in key.lower() for token in ("passport", "nid", "national_id"))}
+    if isinstance(value, list):
+        return [_public_value(item) for item in value]
+    return value
+
+
+def _label(key):
+    return {"name_fa": "Dari name", "name_en": "English name", "name_ps": "Pashto name",
+            "application_id": "Application ID", "is_llc": "Limited liability company"}.get(key, key if key[:1].isupper() else key.replace("_", " ").capitalize())
+
+
+def _section(title, data, include_sensitive=False):
+    data = data if include_sensitive else _public_value(data)
+    return {"title": title, "fields": [{"label": _label(key), "value": value}
+            for key, value in data.items() if value is not None and value != "" and value != [] and value != {}]}
+
+
+def _name(value):
+    if isinstance(value, dict):
+        names = {key: value[key] for key in ("name_fa", "name_en", "name_ps") if value.get(key)}
+        return names or value.get("name")
+    return value if isinstance(value, str) else None
+
+
+def _person_name(person, prefix=""):
+    names = {}
+    for language in ("fa", "en", "ps"):
+        if prefix:
+            text = person.get(f"{prefix}_{language}")
+        else:
+            text = " ".join(str(person.get(f"{part}_{language}") or "").strip() for part in ("first_name", "last_name")).strip()
+        if text:
+            names[f"name_{language}"] = text
+    if names:
+        return names
+    if prefix:
+        return person.get(prefix)
+    return person.get("name") or " ".join(str(person.get(part) or "").strip() for part in ("first_name", "last_name")).strip()
+
+
+def _person(person, staff=False):
+    if not isinstance(person, dict):
+        return None
+    values = {"Full name": _person_name(person), "Father's name": _person_name(person, "father_name"),
+              "Phone": person.get("phone_number") or person.get("phone"), "Email": person.get("email")}
+    if staff:
+        values.update({"Qualification": person.get("qualification_level"), "Shift": person.get("shift")})
+    return {key: value for key, value in values.items() if value is not None and value != "" and value != {}}
+
+
+def _location(address, fallback_province=None):
+    if not isinstance(address, dict):
+        address = {"address": address}
+    street = address.get("address")
+    parts = street if isinstance(street, dict) else {}
+    description = street if isinstance(street, str) else parts.get("not_precise_address")
+    if not description:
+        description = " · ".join(dict.fromkeys(str(value).strip() for value in [parts.get("village_name_fa") or parts.get("village_name") or address.get("village"),
+            parts.get("neighborhood_fa") or parts.get("neighborhood"), parts.get("land_mark_fa") or parts.get("land_mark")] if value))
+    return {"Country": _name(address.get("country") or address.get("country_name")),
+            "Province": (_name(address.get("province") or address.get("province_name")) or _name(fallback_province)),
+            "District": _name(address.get("district") or address.get("district_name")),
+            "Address": street or description,
+            "Village": address.get("village")}
+
+
+def _location_section(address, fallback_province=None):
+    section = _section("Location", _location(address, fallback_province))
+    if isinstance(address, dict):
+        try:
+            latitude, longitude = float(address["latitude"]), float(address["longitude"])
+            if math.isfinite(latitude) and math.isfinite(longitude) and -90 <= latitude <= 90 and -180 <= longitude <= 180:
+                section["location"] = {"latitude": latitude, "longitude": longitude}
+        except (KeyError, TypeError, ValueError, OverflowError):
+            pass
+    return section
+
+
+def _named_items(items):
+    if not isinstance(items, list):
+        return _name(items)
+    return [name for item in items if (name := _name(item))]
+
+
+def _document_url(value):
+    return value.get("file") if isinstance(value, dict) else value if isinstance(value, str) else None
+
+
+def application_details(category, record, include_sensitive=False):
+    """A concise inspection profile, not an explorer for the upstream schema."""
+    location = record.get("address") or {}
+    if not isinstance(location, dict):
+        location = {"address": location}
+    applicant = _person(record.get("applicant"))
+    co_owner = _person(record.get("co_owner"))
+    staff = [_person(person, staff=True) for person in (record.get("technical_staff") or []) if isinstance(person, dict)]
+    sections = [
+        _section("Establishment", {"Name": _name({"name_fa": record.get("name"), "name_en": record.get("name_en")}),
+            "Application ID": record.get("application_id"), "Application status": record.get("application_status"),
+            "Application type": record.get("application_type"), "Grade": record.get("grade")}),
+        _location_section(location),
+        _section("Applicant and ownership", {"Applicant": applicant, "Co-owner": co_owner}),
+        _section("Technical staff", {"Staff members": [person for person in staff if person]}),
+        _section("Legal representative", {"Representative": _person(record.get("sharia_lawyer"))}),
+        _section("License details", {"License number": record.get("aisa_license_number"),
+            "License issue date": record.get("license_issue_date") or record.get("issue_date") or record.get("aisa_license_issue_date"),
+            "License expiry date": record.get("license_expiry_date") or record.get("expiry_date") or record.get("aisa_license_expire_date"),
+            "License document": _document_url(record.get("license_attachment") or record.get("aisa_license_attachment")),
+            "Environmental permit number": record.get("environmental_permit_license_number")}),
+        _section("Activities and premises", {"Activities": _named_items(record.get("activity_domain")),
+            "Production lines": _named_items(record.get("production_lines")), "Premises area": location.get("total_area")}),
+    ]
+    return {"name": record.get("name") or record.get("name_en") or str(record["application_id"]),
             "application_id": record["application_id"], "category": category, "is_demo": False,
-            "sections": [section for section in sections if section["fields"]]}
+            "sections": [section for section in sections if section["fields"] or section.get("location")]}
+
+
+def related_details(record, source, external_id, include_sensitive=False):
+    expected = related_mappings(record).get(source)
+    if expected != external_id:
+        raise ValidationError("The linked source ID changed in Licensing. Refresh the establishment identity to update its mapping.")
+    nested = record.get(source)
+    if isinstance(nested, dict) and nested.get("id") is not None and str(nested["id"]) != external_id:
+        raise ValidationError("Licensing returned an inconsistent linked source ID. The profile cannot be shown safely.")
+    if not isinstance(nested, dict):
+        return {"name": source.capitalize(), "application_id": external_id, "is_demo": False,
+                "via": "licensing", "notice": "Licensing provides this source ID but no source profile. A direct adapter is needed for further details.", "sections": []}
+    return {"name": nested.get("name") or (nested.get("pharmacy_name") if isinstance(nested.get("pharmacy_name"), str) else source.capitalize()),
+            "application_id": external_id, "is_demo": False, "via": "licensing",
+            "notice": "These details are supplied by the linked Licensing record.",
+            "sections": _related_sections(nested, source)}
+
+
+def _related_sections(record, source):
+    locations = record.get("pharmacy_location") or []
+    address = record.get("address") or (locations[-1] if locations else {})
+    owners = record.get("pharmacy_owner") or ([record["owner"]] if isinstance(record.get("owner"), dict) else [])
+    sections = [
+        _section(source.capitalize() + " details", {"Name": record.get("name"), "Establishment type": record.get("entity_type"),
+            "Grade": record.get("grade"), "Application status": record.get("application_status"), "Establishment year": record.get("establishment_year")}),
+        _location_section(address, record.get("province_name")),
+        _section("Ownership", {"Owners": [person for raw in owners if (person := _person(raw))]}),
+    ]
+    return [section for section in sections if section["fields"] or section.get("location")]

@@ -1,3 +1,4 @@
+import { useRegistryCatalog } from "@/features/establishments/registry";
 // Copied AFDA CMS navigation; bound to Mandi routes and permissions.
 import {
   SidebarGroup,
@@ -5,6 +6,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
@@ -28,7 +32,9 @@ const items = [
 ] as const;
 export function NavMain() {
   const { t } = useTranslation();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const catalog = useRegistryCatalog();
+  const selectedKind = new URLSearchParams(search).get("kind");
   const { setOpenMobile } = useSidebar();
   return (
     <SidebarGroup>
@@ -55,6 +61,30 @@ export function NavMain() {
                   <span>{t(title)}</span>
                 </Link>
               </SidebarMenuButton>
+              {url === "/establishments" && (
+                <SidebarMenuSub>
+                  {(catalog.data?.types ?? []).map((type) => (
+                    <SidebarMenuSubItem key={type.code}>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={pathname === "/establishments" && selectedKind === type.code}
+                      >
+                        <Link
+                          to={`/establishments?kind=${encodeURIComponent(type.code)}`}
+                          onClick={() => setOpenMobile(false)}
+                          aria-current={
+                            pathname === "/establishments" && selectedKind === type.code
+                              ? "page"
+                              : undefined
+                          }
+                        >
+                          {t(type.name)}
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  ))}
+                </SidebarMenuSub>
+              )}
             </SidebarMenuItem>
           </Can>
         ))}

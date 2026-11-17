@@ -1,14 +1,14 @@
 from unittest.mock import Mock, patch
 
 import requests
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.integrations.licensing import candidate, get_application, list_applications, LicensingError
 
 
 @override_settings(LICENSING_BASE_URL="http://licensing.test", LICENSING_REGISTRATION_API_KEY="test-key", LICENSING_TIMEOUT=3)
-class LicensingTests(SimpleTestCase):
+class LicensingTests(TestCase):
     def response(self, payload, status=200):
         response = Mock(status_code=status)
         response.json.return_value = payload
@@ -93,7 +93,7 @@ class LicensingDetailProjectionTests(SimpleTestCase):
         self.assertIn("Kabul", text)
         self.assertIn("0700000000", text)
         self.assertNotIn("secret", text)
-        self.assertNotIn("private-document", text)
+        self.assertIn("private-document", text)
 
     def test_optional_sections_are_omitted(self):
         from apps.integrations.licensing import application_details

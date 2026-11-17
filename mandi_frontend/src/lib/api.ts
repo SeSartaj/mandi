@@ -35,6 +35,11 @@ export function errorMessage(error: unknown): string {
       return i18next.t("This record could not be found. It may have been removed.");
     const data = error.response.data;
     if (typeof data?.detail === "string") return data.detail;
+    if (typeof data === "string") return data;
+    if (Array.isArray(data)) {
+      const messages = data.filter((item) => typeof item === "string");
+      if (messages.length) return messages.join(" · ");
+    }
     if (data && typeof data === "object" && !Array.isArray(data)) {
       const messages = Object.entries(data).flatMap(([key, value]) => {
         const items = Array.isArray(value) ? value : [value];
@@ -79,8 +84,14 @@ export type Establishment = {
   province: string;
   district: string;
   address: string;
+  latitude: number | null;
+  longitude: number | null;
   phone: string;
   source_links: SourceLink[];
+  primary_source?: string | null;
+  attributes?: Record<string, unknown>;
+  license_number?: string;
+  status?: string;
 };
 export type SourceLink = {
   id: number;
@@ -89,11 +100,14 @@ export type SourceLink = {
   details: Record<string, unknown>;
   is_demo: boolean;
   linked_at: string;
+  is_primary?: boolean;
+  last_synced_at?: string | null;
 };
 export type Inspection = {
   id: number;
   establishment_id: string;
   establishment_name: string;
+  establishment_snapshot?: Record<string, unknown>;
   inspected_on: string;
   kind: string;
   checklist: { id: number; name: string; version: string };

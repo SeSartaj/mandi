@@ -1,7 +1,34 @@
+import math
 import uuid
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.conf import settings
 from django.db import models
 from apps.core.models import BaseModel
+
+
+class EstablishmentType(models.Model):
+    code = models.SlugField(max_length=20, primary_key=True)
+    name = models.CharField(max_length=100)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class ExternalSystem(models.Model):
+    code = models.SlugField(max_length=20, primary_key=True)
+    name = models.CharField(max_length=100)
+    adapter = models.SlugField(max_length=50)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
 
 
 class Establishment(BaseModel):
@@ -13,12 +40,36 @@ class Establishment(BaseModel):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=250)
-    kind = models.CharField(max_length=20, choices=Kind.choices)
+    kind = models.CharField(max_length=20)
     subtype = models.CharField(max_length=100, blank=True)
-    province = models.CharField(max_length=100)
+    province = models.CharField(max_length=100, blank=True)
     district = models.CharField(max_length=100, blank=True)
     address = models.TextField(blank=True)
+    latitude = models.FloatField(null=True, blank=True, validators=[MinValueValidator(-90), MaxValueValidator(90)])
+    longitude = models.FloatField(null=True, blank=True, validators=[MinValueValidator(-180), MaxValueValidator(180)])
     phone = models.CharField(max_length=100, blank=True)
+    attributes = models.JSONField(default=dict, blank=True)
+    license_number = models.CharField(max_length=200, blank=True)
+    status = models.CharField(max_length=100, blank=True)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        super().clean()
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValidationError("Provide both latitude and longitude.")
+        if any(value is not None and not math.isfinite(value) for value in (self.latitude, self.longitude)):
+            raise ValidationError("Coordinates must be finite numbers.")
+        if not EstablishmentType.objects.filter(code=self.kind, is_active=True).exists():
+            raise ValidationError({"kind": "Select an active establishment type."})
+        if not isinstance(self.attributes, dict):
+            raise ValidationError({"attributes": "Attributes must be a JSON object."})
+
+    def get_kind_display(self):
+        return str(EstablishmentType.objects.filter(pk=self.kind).first() or self.kind)
+
+    @property
+    def primary_source(self):
+        return next((link.source for link in self.source_links.all() if link.is_primary), None)
 
     class Meta:
         ordering = ["name", "id"]
@@ -30,19 +81,25 @@ class SourceLink(models.Model):
         SURVEY = "survey", "Survey"
         ARCHIVE = "archive", "Archive"
         LICENSING = "licensing", "Licensing"
+        REGISTRATION = "registration", "Registration"
 
     establishment = models.ForeignKey(
         Establishment, on_delete=models.CASCADE, related_name="source_links"
     )
-    source = models.CharField(max_length=20, choices=Source.choices)
+    source = models.CharField(max_length=20)
     external_id = models.CharField(max_length=200)
     details = models.JSONField(default=dict)
     is_demo = models.BooleanField(default=False)
+    is_primary = models.BooleanField(default=False)
+    derived_from = models.CharField(max_length=20, blank=True, db_default="")
+    last_synced_at = models.DateTimeField(null=True, blank=True)
     linked_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     linked_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        permissions = [("view_sensitive_source_details", "Can view personal identity details from external sources")]
         constraints = [
+            models.UniqueConstraint(fields=["establishment"], condition=models.Q(is_primary=True), name="one_primary_source"),
             models.UniqueConstraint(
                 fields=["establishment", "source"], name="one_link_per_source"
             ),
@@ -50,3 +107,16 @@ class SourceLink(models.Model):
                 fields=["source", "external_id"], name="unique_external_establishment"
             ),
         ]
+
+
+class RegistrySyncCursor(models.Model):
+    source = models.ForeignKey(ExternalSystem, on_delete=models.PROTECT)
+    kind = models.ForeignKey(EstablishmentType, on_delete=models.PROTECT)
+    next_page = models.PositiveIntegerField(default=1)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=250, blank=True)
+    counts = models.JSONField(default=dict)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["source", "kind"], name="registry_sync_cursor_unique")]

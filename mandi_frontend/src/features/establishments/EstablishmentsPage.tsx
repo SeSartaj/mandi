@@ -1,3 +1,6 @@
+import RegistrySyncStatus from "./RegistrySyncStatus";
+import RegistryImport from "./RegistryImport";
+import { useEstablishmentKinds } from "@/features/establishments/registry";
 import { CreateButton } from "@/components/public/ActionButton";
 import { useState } from "react";
 import { Search } from "lucide-react";
@@ -16,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import EstablishmentForm from "@/features/establishments/EstablishmentForm";
 import { useApiQuery } from "@/features/shared/api";
-import { choiceLabel, establishmentKinds, pageCount } from "@/features/shared/labels";
+import { choiceLabel, pageCount } from "@/features/shared/labels";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useListParams } from "@/hooks/useListParams";
 import { useTablePageSize } from "@/hooks/useTablePageSize";
@@ -25,6 +28,7 @@ import { errorMessage } from "@/lib/api";
 
 export default function EstablishmentsPage() {
   const { t } = useTranslation();
+  const establishmentKinds = useEstablishmentKinds();
   const { params, update, page, setPage } = useListParams();
   const search = params.get("search") ?? "";
   const debouncedSearch = useDebouncedValue(search, 300);
@@ -44,13 +48,17 @@ export default function EstablishmentsPage() {
 
   return (
     <div className="space-y-6">
+      <RegistrySyncStatus />
       <PageSection
         headingLevel={1}
-        title={t("Establishments")}
+        title={kind ? `${t(choiceLabel(kind))} · ${t("Establishments")}` : t("Establishments")}
         description={t("Monitoring & inspection registry")}
         actions={
           <Can permission="establishments.add_establishment">
-            <CreateButton onClick={() => setOpen(true)} label={t("Add establishment")} />
+            <div className="flex flex-wrap gap-2">
+              <RegistryImport />
+              <CreateButton onClick={() => setOpen(true)} label={t("Add establishment")} />
+            </div>
           </Can>
         }
       >

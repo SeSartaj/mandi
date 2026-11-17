@@ -1,3 +1,4 @@
+import { useEstablishmentKinds } from "@/features/establishments/registry";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -10,7 +11,7 @@ import FormDatePicker from "@/components/ui/custom/CustomDatePickerType";
 import FormInput from "@/components/ui/custom/CustomInput";
 import FormSelect from "@/components/ui/custom/CustomSelect";
 import { CustomSearchSelector } from "@/components/ui/custom/CustomSearchSelector";
-import { choiceLabel, establishmentKinds, inspectionKinds } from "@/features/shared/labels";
+import { choiceLabel, inspectionKinds } from "@/features/shared/labels";
 import { useSystemCalendar } from "@/hooks/use-system-calendar";
 import { Can } from "@/components/Can";
 import { useSession } from "@/lib/session";
@@ -50,6 +51,7 @@ export function InspectionFilters({
   initial?: InspectionFilterValues;
 }) {
   const { t } = useTranslation();
+  const establishmentKinds = useEstablishmentKinds();
   const calendar = useSystemCalendar();
   const active = initial;
   const form = useForm<InspectionFilterValues>({

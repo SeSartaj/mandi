@@ -133,3 +133,7 @@ The first implementation milestone is ready for local review: Django/PostgreSQL 
 - [Implementation plan](docs/implementation-plan.md)
 - [Requirement review and drift corrections](docs/implementation-review.md)
 - [Checklist findings](docs/checklist-review-findings.txt)
+
+## Establishment registries and inspection evidence
+
+See [registry ownership, adapters and acceptance tests](docs/registry-and-evidence.md) for native/imported establishments, configurable types, primary sources and historical evidence.
