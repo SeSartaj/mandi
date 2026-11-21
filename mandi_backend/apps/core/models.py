@@ -52,6 +52,7 @@ class Province(BaseModel):
     country = models.ForeignKey(Country, on_delete=models.PROTECT, related_name="provinces")
     code = models.CharField(max_length=20, blank=True)
     name = models.CharField(max_length=120)
+    name_local = models.CharField(max_length=120, blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -75,6 +76,7 @@ class District(BaseModel):
     province = models.ForeignKey(Province, on_delete=models.PROTECT, related_name="districts")
     code = models.CharField(max_length=20, blank=True)
     name = models.CharField(max_length=120)
+    name_local = models.CharField(max_length=120, blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:

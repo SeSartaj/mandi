@@ -26,9 +26,7 @@ const EstablishmentDetailPage = lazy(
 );
 const SourceDetailPage = lazy(() => import("@/features/establishments/SourceDetailPage"));
 const EstablishmentsPage = lazy(() => import("@/features/establishments/EstablishmentsPage"));
-const InspectionDetailPage = lazy(() => import("@/features/inspections/InspectionDetailPage"));
-const InspectionsPage = lazy(() => import("@/features/inspections/InspectionsPage"));
-const ReportsPage = lazy(() => import("@/features/reports/ReportsPage"));
+const SubmissionsPage = lazy(() => import("@/features/submissions/SubmissionsPage"));
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -105,7 +103,7 @@ export default function App() {
           <Route
             path="/"
             element={
-              <Can permission="inspections.view_inspection" fallback={<PermissionDenied />}>
+              <Can permission="establishments.view_establishment" fallback={<PermissionDenied />}>
                 <DashboardPage />
               </Can>
             }
@@ -142,22 +140,6 @@ export default function App() {
             }
           />
           <Route
-            path="/inspections"
-            element={
-              <Can permission="inspections.view_inspection" fallback={<PermissionDenied />}>
-                <InspectionsPage />
-              </Can>
-            }
-          />
-          <Route
-            path="/inspections/:id"
-            element={
-              <Can permission="inspections.view_inspection" fallback={<PermissionDenied />}>
-                <InspectionDetailPage />
-              </Can>
-            }
-          />
-          <Route
             path="/checklists"
             element={
               <Can permission="inspections.view_checklist" fallback={<PermissionDenied />}>
@@ -174,18 +156,18 @@ export default function App() {
             }
           />
           <Route
-            path="/submissions/:id"
+            path="/submissions"
             element={
               <Can permission="establishments.view_establishment" fallback={<PermissionDenied />}>
-                <SubmissionDetailPage />
+                <SubmissionsPage />
               </Can>
             }
           />
           <Route
-            path="/reports"
+            path="/submissions/:id"
             element={
-              <Can permission="inspections.view_inspection" fallback={<PermissionDenied />}>
-                <ReportsPage />
+              <Can permission="establishments.view_establishment" fallback={<PermissionDenied />}>
+                <SubmissionDetailPage />
               </Can>
             }
           />

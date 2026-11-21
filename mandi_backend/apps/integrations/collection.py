@@ -11,7 +11,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from openpyxl import load_workbook
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import APIException, ValidationError
 
 from apps.accounts.services import require, require_checklist_access, scope_checklists
 from apps.establishments.models import Establishment
@@ -21,14 +21,26 @@ from apps.inspections.models import Checklist
 from .models import CollectionSubmission, CollectorGrant, FormDeployment
 from .providers import CollectionError, provider
 from .submissions import form_schema
-from .xlsform import XlsFormError, add_establishment_question, set_form_title
+from .xlsform import (
+    XlsFormError,
+    add_establishment_question,
+    set_form_title,
+    uses_establishment_type_filter,
+)
 
 
 def deployment_url(deployment):
     return provider(deployment.provider).form_url(deployment) if deployment else None
 
 
-def deploy(actor, pk):
+class StructureConflict(APIException):
+    """The published form changed structure; an operator may force-publish it."""
+
+    status_code = 409
+    default_code = "structure_conflict"
+
+
+def deploy(actor, pk, project_id=None, force=False):
     require(actor, "inspections.deploy_checklist")
     require_checklist_access(actor, pk)
     from django.shortcuts import get_object_or_404
@@ -36,14 +48,27 @@ def deploy(actor, pk):
     checklist = get_object_or_404(Checklist, pk=pk)
     if not checklist.xlsform:
         raise ValidationError("Upload an XLSForm before deploying.")
-    deployment, _ = FormDeployment.objects.get_or_create(
-        checklist=checklist,
-        provider=settings.COLLECTION_PROVIDER,
-        defaults={
-            "project_id": settings.COLLECTION_PROJECT_ID,
-            "form_id": f"mandi_{checklist.pk}",
-        },
-    )
+    project = str(project_id or settings.COLLECTION_PROJECT_ID)
+    form_id = f"mandi_checklist_{checklist.pk}"
+    deployment = FormDeployment.objects.filter(
+        checklist=checklist, provider=settings.COLLECTION_PROVIDER
+    ).first()
+    if deployment is None:
+        deployment = FormDeployment.objects.create(
+            checklist=checklist,
+            provider=settings.COLLECTION_PROVIDER,
+            project_id=project,
+            form_id=form_id,
+        )
+    elif deployment.project_id != project or deployment.form_id != form_id:
+        # Move to another project and/or adopt the collision-free form id.
+        deployment.project_id = project
+        deployment.form_id = form_id
+        deployment.status = "not_deployed"
+        deployment.error = ""
+        deployment.save(
+            update_fields=["project_id", "form_id", "status", "error"]
+        )
     # Atomic claim prevents two uploads from racing to publish different drafts.
     if (
         not FormDeployment.objects.filter(pk=deployment.pk)
@@ -56,6 +81,7 @@ def deploy(actor, pk):
         raise ValidationError(
             "This checklist is already deploying. Retry after it finishes."
         )
+    all_types = False
     try:
         with checklist.xlsform.open("rb") as source:
             content, _ = add_establishment_question(
@@ -92,18 +118,26 @@ def deploy(actor, pk):
                         "",
                     )
         deployment.schema = form_schema(asset)
+        all_types = uses_establishment_type_filter(workbook)
         output = io.BytesIO()
         workbook.save(output)
         workbook.close()
         provider(deployment.provider).deploy(
             deployment,
             output.getvalue(),
-            establishment_choice_csv(kind=checklist.establishment_kind),
+            establishment_choice_csv()
+            if all_types
+            else establishment_choice_csv(kind=checklist.establishment_kind_id),
+            force=force,
         )
     except (CollectionError, XlsFormError, ValueError, OSError, BadZipFile) as exc:
         FormDeployment.objects.filter(pk=deployment.pk).update(
             status="failed", error=str(exc)
         )
+        if isinstance(exc, CollectionError) and getattr(
+            exc, "structure_conflict", False
+        ):
+            raise StructureConflict(str(exc)) from exc
         raise ValidationError({"deployment": str(exc)}) from exc
     except Exception:
         FormDeployment.objects.filter(pk=deployment.pk).update(
@@ -115,10 +149,21 @@ def deploy(actor, pk):
     deployment.error = ""
     deployment.deployed_at = timezone.now()
     deployment.save()
+    if checklist.allows_all_types != all_types:
+        checklist.allows_all_types = all_types
+        checklist.save(update_fields=["allows_all_types"])
     return checklist
 
 
-def submissions(actor, checklist_id=None, establishment_id=None):
+def submissions(
+    actor,
+    checklist_id=None,
+    establishment_id=None,
+    establishment_kind=None,
+    search=None,
+    date_from=None,
+    date_to=None,
+):
     require(actor, "establishments.view_establishment")
     qs = CollectionSubmission.objects.select_related(
         "deployment__checklist", "establishment"
@@ -129,34 +174,56 @@ def submissions(actor, checklist_id=None, establishment_id=None):
         qs = qs.filter(deployment__checklist_id=checklist_id)
     if establishment_id:
         qs = qs.filter(establishment_id=establishment_id)
+    if establishment_kind:
+        qs = qs.filter(establishment__kind_id=establishment_kind)
+    if search:
+        qs = qs.filter(
+            Q(establishment__name__icontains=search)
+            | Q(submission_id__icontains=search)
+        )
+    if date_from:
+        qs = qs.filter(submitted_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(submitted_at__date__lte=date_to)
     return qs
 
 
+def form_versions(actor, checklist_id):
+    """Published versions of the checklist's deployed form."""
+    require(actor, "inspections.view_checklist")
+    require_checklist_access(actor, checklist_id)
+    deployment = FormDeployment.objects.filter(
+        checklist_id=checklist_id,
+        provider=settings.COLLECTION_PROVIDER,
+        status="deployed",
+    ).first()
+    if deployment is None:
+        return []
+    try:
+        return provider(deployment.provider).form_versions(deployment)
+    except CollectionError as exc:
+        raise ValidationError({"collection": str(exc)}) from exc
+
+
 def sync(actor, checklist_id=None):
-    require(actor, "inspections.add_inspection")
+    require(actor, "inspections.deploy_checklist")
     qs = FormDeployment.objects.filter(status="deployed")
     qs = scope_checklists(actor, qs, "checklist_id")
     if checklist_id:
         require_checklist_access(actor, checklist_id)
         qs = qs.filter(checklist_id=checklist_id)
-    counts = {
-        "fetched": 0,
-        "created": 0,
-        "updated": 0,
-        "skipped": 0,
-        "inspections": 0,
-        "unmapped_inspectors": 0,
-    }
+    counts = {"fetched": 0, "created": 0, "updated": 0, "skipped": 0}
     try:
         for deployment in qs.select_related("checklist"):
             for remote in provider(deployment.provider).submissions(deployment):
-                data = remote.data
                 counts["fetched"] += 1
-                # Establishment selector is inserted at the form root.
-                value = remote.establishment_id
+                identity = remote.submission_id
+                if not identity:
+                    counts["skipped"] += 1
+                    continue
                 try:
                     establishment = Establishment.objects.get(
-                        pk=value, kind=deployment.checklist.establishment_kind
+                        pk=remote.establishment_id
                     )
                 except (
                     Establishment.DoesNotExist,
@@ -166,76 +233,17 @@ def sync(actor, checklist_id=None):
                 ):
                     counts["skipped"] += 1
                     continue
-                identity = remote.submission_id
-                if not identity:
-                    counts["skipped"] += 1
-                    continue
                 _submission, created = CollectionSubmission.objects.update_or_create(
                     deployment=deployment,
                     submission_id=identity,
                     defaults={
                         "establishment": establishment,
-                        "data": data,
+                        "data": remote.data,
                         "submitted_at": remote.submitted_at,
+                        "form_version": remote.form_version,
                     },
                 )
                 counts["created" if created else "updated"] += 1
-                # Map Central's immutable submitter actor ID to a Mandi employee.
-                remote_actor = remote.inspector_id
-                grant = (
-                    CollectorGrant.objects.filter(
-                        deployment=deployment, remote_id=remote_actor
-                    )
-                    .select_related("user")
-                    .first()
-                )
-                if not grant or not grant.user.is_active:
-                    counts["unmapped_inspectors"] += 1
-                    continue
-                from apps.inspections.services import ingest_inspection
-
-                from .submissions import extract_scores
-                from .submissions import flatten_answers as flatten
-
-                scores = extract_scores(flatten(data))
-                import hashlib
-                import json
-
-                summary = {
-                    "submission_revision": hashlib.sha256(
-                        json.dumps(data, sort_keys=True).encode()
-                    ).hexdigest()
-                }
-                if scores["percent"] is not None:
-                    summary["overall_percent"] = scores["percent"]
-                date_value = remote.inspected_on
-                from datetime import date
-
-                try:
-                    inspected_on = date.fromisoformat(date_value)
-                except (ValueError, TypeError):
-                    counts["skipped"] += 1
-                    continue
-                kind = remote.inspection_kind
-                if kind not in {"comprehensive", "brief", "follow_up", "special"}:
-                    counts["skipped"] += 1
-                    continue
-                ingest_inspection(
-                    actor,
-                    {
-                        "establishment_id": establishment.pk,
-                        "checklist_id": deployment.checklist_id,
-                        "inspected_on": inspected_on,
-                        "kind": kind,
-                        "team_ids": [grant.user_id],
-                        "provider": deployment.provider,
-                        "provider_form_id": f"{deployment.project_id}:{deployment.form_id}",
-                        "submission_id": identity,
-                        "mapping_version": f"{deployment.provider}-v1",
-                        "summary": summary,
-                    },
-                )
-                counts["inspections"] += 1
     except CollectionError as exc:
         raise ValidationError({"collection": str(exc)}) from exc
     return counts

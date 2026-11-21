@@ -11,7 +11,6 @@ import { Can } from "@/components/Can";
 import { AppDialog } from "@/components/public/AppDialog";
 import { AppErrorState } from "@/components/public/AppErrorState";
 import { AppLoader } from "@/components/public/AppLoader";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,7 +22,6 @@ type Candidate = {
   id: string;
   name: string;
   details: SourceLink["details"];
-  is_demo: boolean;
 };
 
 export default function SourcePanel({
@@ -56,7 +54,7 @@ export default function SourcePanel({
     enabled: open,
     queryFn: async ({ signal }) =>
       (
-        await api.get<{ results: Candidate[]; is_demo: boolean; has_next: boolean }>(
+        await api.get<{ results: Candidate[]; has_next: boolean }>(
           `/sources/${source}/`,
           {
             params: { kind: establishment.kind, search: debouncedSearch, page },
@@ -81,7 +79,6 @@ export default function SourcePanel({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <CardTitle className="text-base">{t(title)}</CardTitle>
-        {link?.is_demo ? <Badge variant="secondary">{t("Demonstration data")}</Badge> : null}
       </CardHeader>
       <CardContent className="space-y-4">
         {link ? (
@@ -191,7 +188,6 @@ export default function SourcePanel({
           <p className="muted">
             {t("Select a record to connect. Source details remain separate from Mandi details.")}
           </p>
-          {candidates.data?.is_demo && <Badge variant="secondary">{t("Demonstration data")}</Badge>}
           <Input
             aria-label={t("Search")}
             placeholder={t("Search")}

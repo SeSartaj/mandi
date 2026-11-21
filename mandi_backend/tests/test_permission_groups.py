@@ -16,7 +16,7 @@ class PermissionGroupTests(TestCase):
         return user
 
     def test_migration_installs_explicit_groups_without_seeding(self):
-        roles = import_module("apps.accounts.migrations.0002_predefined_groups").ROLES
+        roles = import_module("apps.accounts.migrations.0003_predefined_groups").ROLES
         for name, specs in roles.items():
             actual = set(
                 Group.objects.get(name=name).permissions.values_list(
@@ -25,14 +25,13 @@ class PermissionGroupTests(TestCase):
             )
             self.assertEqual(actual, set(specs))
         viewers = self.user_in("Mandi viewers")
-        self.assertTrue(viewers.has_perm("inspections.view_inspection"))
-        self.assertFalse(viewers.has_perm("inspections.approve_inspection"))
+        self.assertTrue(viewers.has_perm("inspections.view_checklist"))
+        self.assertFalse(viewers.has_perm("accounts.add_user"))
         registry = self.user_in("Mandi registry officers")
         self.assertTrue(registry.has_perm("establishments.change_establishment"))
         self.assertFalse(registry.has_perm("accounts.add_user"))
         reviewer = self.user_in("Mandi inspection reviewers")
-        self.assertTrue(reviewer.has_perm("inspections.approve_inspection"))
-        self.assertFalse(reviewer.has_perm("inspections.add_inspection"))
+        self.assertFalse(reviewer.has_perm("inspections.deploy_checklist"))
 
     def test_group_assignment_and_escalation_protection(self):
         administrator = self.user_in("Mandi administrators")
@@ -86,7 +85,7 @@ class PermissionGroupTests(TestCase):
             403,
         )
         self.assertEqual(client.get("/api/v1/permission-groups/").status_code, 403)
-        self.assertEqual(client.post("/api/v1/inspections/1/approve/").status_code, 403)
+        self.assertEqual(client.get("/api/v1/submissions/").status_code, 200)
         admin = self.user_in("Mandi administrators")
         client.force_authenticate(admin)
         response = client.get("/api/v1/permission-groups/")
@@ -95,7 +94,7 @@ class PermissionGroupTests(TestCase):
 
     def test_new_permissions_do_not_expand_predefined_groups(self):
         ct = Permission.objects.get(
-            content_type__app_label="inspections", codename="view_inspection"
+            content_type__app_label="inspections", codename="view_checklist"
         ).content_type
         permission = Permission.objects.create(
             content_type=ct,

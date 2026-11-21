@@ -18,7 +18,6 @@ x-mandi-env: &mandi-env
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/setup.sh}
   POSTGRES_HOST: mandi-db
   POSTGRES_PORT: '5432'
-  DEMO_INTEGRATIONS: '0'
   COLLECTION_PROVIDER: odk
   ODK_BASE_URL: http://central-service:8383
   ODK_PUBLIC_URL: ${PUBLIC_COLLECTION_URL:?Set PUBLIC_COLLECTION_URL in .env}

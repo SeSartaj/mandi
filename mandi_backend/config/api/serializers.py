@@ -1,11 +1,9 @@
-from apps.integrations.submissions import extract_scores, submission_answers
-
 """API input validation and response shapes; domain rules live in services."""
 
-from apps.establishments.models import Establishment, SourceLink
-from apps.inspections.models import Checklist, Inspection
-from apps.integrations import services as integrations
-from apps.integrations.models import KoboSubmission
+from apps.core.models import District, Province
+from apps.establishments.models import Establishment, EstablishmentType, SourceLink
+from apps.inspections.models import Checklist
+from apps.integrations.models import CollectionSubmission
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
@@ -33,6 +31,12 @@ class LoginInput(serializers.Serializer):
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 
 
+class EstablishmentTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EstablishmentType
+        fields = ("code", "name", "is_active")
+
+
 class SourceLinkSerializer(serializers.ModelSerializer):
     class Meta:
         model = SourceLink
@@ -41,7 +45,6 @@ class SourceLinkSerializer(serializers.ModelSerializer):
             "source",
             "external_id",
             "details",
-            "is_demo",
             "linked_by",
             "linked_at",
             "is_primary",
@@ -49,8 +52,45 @@ class SourceLinkSerializer(serializers.ModelSerializer):
         )
 
 
+class ProvinceField(serializers.PrimaryKeyRelatedField):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("queryset", Province.objects.all())
+        kwargs.setdefault("allow_null", True)
+        kwargs.setdefault("required", False)
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        if data in (None, ""):
+            return None
+        if isinstance(data, str) and not data.isdigit():
+            from apps.establishments.services import _location_value
+
+            return _location_value(data)
+        return super().to_internal_value(data)
+
+
+class DistrictField(serializers.PrimaryKeyRelatedField):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("queryset", District.objects.all())
+        kwargs.setdefault("allow_null", True)
+        kwargs.setdefault("required", False)
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        if data in (None, ""):
+            return None
+        if isinstance(data, str) and not data.isdigit():
+            return District.objects.filter(name__iexact=data).first()
+        return super().to_internal_value(data)
+
+
 class EstablishmentSerializer(serializers.ModelSerializer):
-    province = serializers.CharField(max_length=100, allow_blank=False, required=True)
+    province = ProvinceField()
+    district = DistrictField()
+    province_name = serializers.CharField(source="province.name", read_only=True)
+    province_name_local = serializers.CharField(source="province.name_local", read_only=True)
+    district_name = serializers.CharField(source="district.name", read_only=True)
+    district_name_local = serializers.CharField(source="district.name_local", read_only=True)
     source_links = SourceLinkSerializer(many=True, read_only=True)
     primary_source = serializers.ReadOnlyField()
 
@@ -60,18 +100,17 @@ class EstablishmentSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "kind",
-            "subtype",
             "province",
+            "province_name",
+            "province_name_local",
             "district",
+            "district_name",
+            "district_name_local",
             "address",
             "latitude",
             "longitude",
-            "phone",
             "source_links",
             "primary_source",
-            "attributes",
-            "license_number",
-            "status",
             "created_at",
             "updated_at",
         )
@@ -79,160 +118,42 @@ class EstablishmentSerializer(serializers.ModelSerializer):
 
 
 class ChecklistSerializer(serializers.ModelSerializer):
-    kobo_project_url = serializers.SerializerMethodField()
     submission_count = serializers.SerializerMethodField()
     collection = serializers.SerializerMethodField()
-
-    def get_collection(self, obj):
-        from apps.integrations.collection import deployment_url
-        if settings.COLLECTION_PROVIDER == "kobo":
-            return {"provider": "kobo", "form_id": obj.kobo_asset_uid, "status": obj.kobo_deployment_status,
-                    "error": obj.kobo_deployment_error, "deployed_at": obj.kobo_deployed_at, "url": self.get_kobo_project_url(obj)}
-        deployment = obj.deployments.filter(provider=settings.COLLECTION_PROVIDER).first()
-        if not deployment:
-            return {"provider": settings.COLLECTION_PROVIDER, "form_id": "", "status": "not_deployed", "error": "", "deployed_at": None, "url": None}
-        return {"provider": deployment.provider, "form_id": deployment.form_id, "status": deployment.status,
-                "error": deployment.error, "deployed_at": deployment.deployed_at, "url": deployment_url(deployment)}
 
     class Meta:
         model = Checklist
         fields = "__all__"
 
-    def get_kobo_project_url(self, obj):
-        if not obj.kobo_asset_uid:
-            return None
-        host = settings.KOBO_HOST_HEADER or settings.KOBO_BASE_URL
-        if "://" not in host:
-            host = f"http://{host}"
-        return f"{host.rstrip('/')}/#/forms/{obj.kobo_asset_uid}"
+    def get_collection(self, obj):
+        from apps.integrations.collection import deployment_url
+
+        deployment = obj.deployments.filter(provider=settings.COLLECTION_PROVIDER).first()
+        if not deployment:
+            return {
+                "provider": settings.COLLECTION_PROVIDER,
+                "project_id": None,
+                "form_id": "",
+                "status": "not_deployed",
+                "error": "",
+                "deployed_at": None,
+                "url": None,
+            }
+        return {
+            "provider": deployment.provider,
+            "project_id": int(deployment.project_id),
+            "form_id": deployment.form_id,
+            "status": deployment.status,
+            "error": deployment.error,
+            "deployed_at": deployment.deployed_at,
+            "url": deployment_url(deployment),
+        }
 
     def get_submission_count(self, obj):
-        if settings.COLLECTION_PROVIDER != "kobo":
-            from apps.integrations.models import CollectionSubmission
-            return CollectionSubmission.objects.filter(deployment__checklist=obj).count()
         count = getattr(obj, "submission_count", None)
-        return count if count is not None else obj.kobo_submissions.count()
-
-
-class KoboSubmissionSerializer(serializers.ModelSerializer):
-    checklist_name = serializers.CharField(source="checklist.name", default=None)
-    checklist_version = serializers.CharField(source="checklist.version", default=None)
-    checklist_id = serializers.IntegerField(source="checklist.id", default=None)
-    establishment_name = serializers.CharField(
-        source="establishment.name", default=None
-    )
-    scores = serializers.SerializerMethodField()
-    answers = serializers.SerializerMethodField()
-    attachments = serializers.SerializerMethodField()
-    kobo_url = serializers.SerializerMethodField()
-
-    class Meta:
-        model = KoboSubmission
-        fields = (
-            "id",
-            "asset_uid",
-            "submission_id",
-            "establishment_id",
-            "establishment_name",
-            "checklist_id",
-            "checklist_name",
-            "checklist_version",
-            "submitted_at",
-            "scores",
-            "answers",
-            "attachments",
-            "kobo_url",
-            "data",
-        )
-
-    @staticmethod
-    def attachment_url(obj, index):
-        return f"/kobo-submissions/{obj.pk}/attachments/{index}/"
-
-    def get_scores(self, obj):
-        return extract_scores(obj.data)
-
-    def get_answers(self, obj):
-        answers = submission_answers(obj.data, obj.form_schema)
-        for answer in answers:
-            for media in answer.get("media") or []:
-                media["url"] = self.attachment_url(obj, media["index"])
-        return answers
-
-    def get_attachments(self, obj):
-        return [
-            {**attachment, "url": self.attachment_url(obj, attachment["index"])}
-            for attachment in integrations.submission_attachments(obj.data)
-        ]
-
-    def get_kobo_url(self, obj):
-        return integrations.kobo_asset_url(obj.asset_uid)
-
-
-class InspectionSerializer(serializers.ModelSerializer):
-    establishment_name = serializers.SerializerMethodField()
-
-    def get_establishment_name(self, obj):
-        return obj.establishment_snapshot.get("name") or obj.establishment.name
-    checklist = ChecklistSerializer()
-    team = UserSerializer(many=True)
-    approved_by = UserSerializer()
-
-    class Meta:
-        model = Inspection
-        fields = (
-            "id",
-            "establishment_id",
-            "establishment_name",
-            "checklist",
-            "inspected_on",
-            "kind",
-            "team",
-            "provider",
-            "provider_form_id",
-            "submission_id",
-            "mapping_version",
-            "summary",
-            "establishment_snapshot",
-            "approved",
-            "approved_by",
-            "approved_at",
-            "is_demo",
-            "synced_at",
-        )
-
-
-class SectionInput(serializers.Serializer):
-    name = serializers.CharField()
-    earned = serializers.FloatField(min_value=0)
-    possible = serializers.FloatField(min_value=0)
-
-
-class FindingInput(serializers.Serializer):
-    issue = serializers.CharField()
-    action = serializers.CharField(required=False, allow_blank=True, default="")
-    deadline = serializers.DateField(required=False)
-
-
-class SummaryInput(serializers.Serializer):
-    overall_percent = serializers.FloatField(min_value=0, max_value=100, required=False)
-    sections = SectionInput(many=True, required=False)
-    findings = FindingInput(many=True, required=False)
-
-
-class IngestInput(serializers.Serializer):
-    establishment_id = serializers.UUIDField()
-    checklist_id = serializers.IntegerField(min_value=1)
-    inspected_on = serializers.DateField()
-    kind = serializers.ChoiceField(choices=Inspection.Kind.choices)
-    team_ids = serializers.ListField(
-        child=serializers.IntegerField(min_value=1), allow_empty=False
-    )
-    provider = serializers.CharField(max_length=50)
-    provider_form_id = serializers.CharField(max_length=100)
-    submission_id = serializers.CharField(max_length=200)
-    mapping_version = serializers.CharField(max_length=100)
-    summary = SummaryInput(default=dict)
+        if count is not None:
+            return count
+        return CollectionSubmission.objects.filter(deployment__checklist=obj).count()
 
 
 class Filters(serializers.Serializer):
@@ -261,6 +182,8 @@ class Filters(serializers.Serializer):
 class SubmissionFilters(serializers.Serializer):
     search = serializers.CharField(required=False, allow_blank=True)
     establishment_id = serializers.UUIDField(required=False)
+    establishment_kind = serializers.CharField(max_length=20, required=False)
+    checklist_id = serializers.IntegerField(min_value=1, required=False)
     date_from = serializers.DateField(required=False)
     date_to = serializers.DateField(required=False)
 

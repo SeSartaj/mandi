@@ -5,7 +5,6 @@ from django.urls import path
 from django.http import JsonResponse
 from . import api
 from .api.establishments import NearbyEstablishments, RegistryCatalog, RegistryImport, RegistryRefresh, RegistryOwnership, RegistrySyncStatus
-from .api.registry_evidence import InspectionEvidenceView
 from .schema import Schema
 from .api.checklists import ChecklistDownload
 from .api.accounts import EmployeeDetail
@@ -25,7 +24,6 @@ def health(request):
 urlpatterns = [
     path("api/v1/establishments/nearby/", NearbyEstablishments.as_view()),
     path("api/v1/registry/sync/", RegistrySyncStatus.as_view()),
-    path("api/v1/inspections/<int:pk>/evidence/", InspectionEvidenceView.as_view()),
     path("api/v1/registry/", RegistryCatalog.as_view()),
     path("api/v1/registry/import/", RegistryImport.as_view()),
     path("api/v1/establishments/<uuid:pk>/refresh/", RegistryRefresh.as_view()),
@@ -35,8 +33,12 @@ urlpatterns = [
     path("api/v1/employees/<int:pk>/", EmployeeDetail.as_view()),
     path("api/v1/employees/<int:pk>/collection-access/", CollectorAccess.as_view()),
     path("api/v1/integrations/collection/sync/", CollectionSync.as_view()),
-    path("api/v1/integrations/establishments.csv", api.KoboEstablishmentsCsv.as_view()),
+    path("api/v1/odk/projects/", api.OdkProjects.as_view()),
+    path("api/v1/odk/projects/<int:project_id>/", api.OdkProjectDetail.as_view()),
+    path("api/v1/integrations/establishments.csv", api.EstablishmentsCsv.as_view()),
     path("api/v1/checklists/<int:pk>/collection-submissions/", CollectionSubmissions.as_view()),
+    path("api/v1/submissions/", CollectionSubmissions.as_view()),
+    path("api/v1/checklists/<int:pk>/versions/", api.ChecklistVersions.as_view()),
     path("api/v1/establishments/<uuid:establishment_pk>/collection-submissions/", CollectionSubmissions.as_view()),
     path("api/v1/collection-submissions/<int:pk>/attachments/<int:index>/", CollectionAttachment.as_view()),
     path("api/v1/collection-submissions/<int:pk>/", CollectionSubmissionDetail.as_view()),
@@ -51,28 +53,15 @@ for route, view in [
     ("permission-groups/", api.PermissionGroups),
     ("establishments/", api.Establishments),
     ("establishments/<uuid:pk>/", api.EstablishmentDetail),
+    ("establishment-types/", api.EstablishmentTypes),
+    ("establishment-types/<slug:code>/", api.EstablishmentTypeDetail),
     ("establishments/<uuid:pk>/sources/<str:source>/", api.SourceConnection),
-    ("establishments/<uuid:pk>/kobo-submissions/", api.EstablishmentKoboSubmissions),
     ("sources/<str:source>/", api.SourceSearch),
-    ("inspections/", api.Inspections),
-    ("inspections/<int:pk>/", api.InspectionDetail),
-    ("inspections/<int:pk>/approve/", api.Approve),
-    ("integrations/ingest/", api.Ingest),
     ("integrations/establishment-choices/", api.Choices),
-    ("integrations/kobo/sync/", api.KoboSync),
-    ("integrations/kobo/establishments.csv", api.KoboEstablishmentsCsv),
     ("checklists/", api.Checklists),
     ("checklists/metadata/", api.ChecklistMetadata),
     ("checklists/<int:pk>/", api.ChecklistDetail),
-    ("checklists/<int:pk>/submissions/", api.ChecklistSubmissions),
     ("checklists/<int:pk>/deploy/", api.ChecklistDeploy),
-    ("checklists/<int:pk>/link-kobo/", api.ChecklistLinkKobo),
-    ("kobo-submissions/<int:pk>/", api.KoboSubmissionDetail),
-    (
-        "kobo-submissions/<int:pk>/attachments/<int:index>/",
-        api.KoboSubmissionAttachment,
-    ),
-    ("reports/coverage/", api.Coverage),
 ]:
     urlpatterns.append(path("api/v1/" + route, view.as_view()))
 

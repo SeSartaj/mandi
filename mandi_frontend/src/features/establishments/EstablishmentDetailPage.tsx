@@ -1,6 +1,6 @@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { DeferredMap } from "./SourceDetails";
-import { useRegistryCatalog } from "@/features/establishments/registry";
+import SourceDetails, { DeferredMap, type SourceDetail } from "./SourceDetails";
+import { useLocationName, useRegistryCatalog } from "@/features/establishments/registry";
 import RegistryOwnership from "@/features/establishments/RegistryOwnership";
 import { EditButton } from "@/components/public/ActionButton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -9,7 +9,6 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 
-import { useSession } from "@/lib/session";
 import { Can } from "@/components/Can";
 import { PageSection } from "@/components/PageSection";
 import { AppDialog } from "@/components/public/AppDialog";
@@ -23,12 +22,12 @@ import { Badge } from "@/components/ui/badge";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import EstablishmentForm from "@/features/establishments/EstablishmentForm";
 import SourcePanel from "@/features/establishments/SourcePanel";
-import InspectionTable from "@/features/inspections/InspectionTable";
 import { useApiQuery } from "@/features/shared/api";
 import { choiceLabel, pageCount } from "@/features/shared/labels";
 import { useTablePageSize } from "@/hooks/useTablePageSize";
-import type { Establishment, Inspection, KoboSubmission, Page } from "@/lib/api";
+import type { Establishment, Page, Submission } from "@/lib/api";
 import { api, errorMessage } from "@/lib/api";
+import { useSession } from "@/lib/session";
 
 function scoreVariant(percent: number | null | undefined) {
   if (percent === null || percent === undefined) return "secondary" as const;
@@ -83,34 +82,34 @@ function ScoreBar({ percent }: { percent: number | null }) {
 export default function EstablishmentDetailPage() {
   const { t } = useTranslation();
   const catalog = useRegistryCatalog();
+  const locationName = useLocationName();
   const { id } = useParams();
   const client = useQueryClient();
   const { permissions } = useSession();
   const [edit, setEdit] = useState(false);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useTablePageSize();
-  const [koboPage, setKoboPage] = useState(1);
-  const [koboPageSize, setKoboPageSize] = useTablePageSize();
-  const [selectedSubmission, setSelectedSubmission] = useState<KoboSubmission | null>(null);
+  const [submissionPage, setSubmissionPage] = useState(1);
+  const [submissionPageSize, setSubmissionPageSize] = useTablePageSize();
+  const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const data = useApiQuery<Establishment>(["establishment", id], `/establishments/${id}/`);
-  const visits = useApiQuery<Page<Inspection>>(
-    ["establishment-inspections", id],
-    "/inspections/",
+  const licensingLink = data.data?.source_links.find((link) => link.source === "licensing");
+  const licensing = useApiQuery<SourceDetail>(
+    ["licensing-profile", id],
+    `/establishments/${id}/sources/licensing/`,
+    {},
     {
-      establishment_id: id,
-      page,
-      page_size: pageSize,
+      enabled:
+        Boolean(licensingLink) &&
+        permissions.includes("establishments.view_sourcelink"),
     },
-    { enabled: permissions.includes("inspections.view_inspection") },
   );
-  const koboSubmissions = useApiQuery<Page<KoboSubmission>>(
-    ["kobo-submissions", id],
+  const submissions = useApiQuery<Page<Submission>>(
+    ["collection-submissions", id],
     `/establishments/${id}/collection-submissions/`,
-    { page: koboPage, page_size: koboPageSize },
+    { page: submissionPage, page_size: submissionPageSize },
   );
-  const syncKobo = useMutation({
+  const syncSubmissions = useMutation({
     mutationFn: () => api.post("/integrations/collection/sync/", { establishment_id: id }),
-    onSettled: () => client.invalidateQueries({ queryKey: ["kobo-submissions", id] }),
+    onSettled: () => client.invalidateQueries({ queryKey: ["collection-submissions", id] }),
   });
 
   if (data.isPending) return <AppLoader label={t("Loading…")} className="py-16" />;
@@ -121,8 +120,7 @@ export default function EstablishmentDetailPage() {
     establishment.latitude != null && establishment.longitude != null
       ? { latitude: establishment.latitude, longitude: establishment.longitude }
       : null;
-  const visitCount = visits.data?.count ?? 0;
-  const koboCount = koboSubmissions.data?.count ?? 0;
+  const submissionCount = submissions.data?.count ?? 0;
 
   return (
     <div className="space-y-6">
@@ -132,7 +130,7 @@ export default function EstablishmentDetailPage() {
       </Link>
       <AppTitle
         title={establishment.name}
-        description={`${t(choiceLabel(establishment.kind))} · ${establishment.province}`}
+        description={`${t(choiceLabel(establishment.kind))} · ${locationName(establishment.province_name, establishment.province_name_local)}`}
         others={
           <Can permission="establishments.change_establishment">
             <EditButton
@@ -155,14 +153,18 @@ export default function EstablishmentDetailPage() {
         contentClassName="pt-4"
       >
         <dl className="info-grid">
-          {["subtype", "province", "district", "address", "phone", "license_number", "status"].map(
-            (key) => (
-              <div key={key}>
-                <dt>{t(key.charAt(0).toUpperCase() + key.slice(1))}</dt>
-                <dd>{(establishment[key as keyof Establishment] as string) || "—"}</dd>
-              </div>
-            ),
-          )}
+          {([
+            ["Province", locationName(establishment.province_name, establishment.province_name_local)],
+            ["District", locationName(establishment.district_name, establishment.district_name_local)],
+            ["Address", establishment.address],
+            ["Latitude", establishment.latitude],
+            ["Longitude", establishment.longitude],
+          ] as [string, string | number | null][]).map(([label, value]) => (
+            <div key={label}>
+              <dt>{t(label)}</dt>
+              <dd>{value ?? "—"}</dd>
+            </div>
+          ))}
         </dl>
         {location && (
           <div className="mt-4">
@@ -178,6 +180,34 @@ export default function EstablishmentDetailPage() {
           </div>
         </details>
       </PageSection>
+
+      {licensingLink && permissions.includes("establishments.view_sourcelink") ? (
+        <PageSection
+          title={t("Licensing details")}
+          description={t(
+            "Establishment identity, license, location, ownership and technical staff from Licensing.",
+          )}
+          actions={
+            <Link
+              className="text-link"
+              to={`/establishments/${establishment.id}/sources/licensing`}
+            >
+              {t("Open full profile")}
+            </Link>
+          }
+        >
+          {licensing.isPending ? (
+            <AppLoader label={t("Loading Licensing details…")} className="py-8" />
+          ) : licensing.error ? (
+            <AppErrorState
+              message={errorMessage(licensing.error)}
+              onRetry={() => licensing.refetch()}
+            />
+          ) : licensing.data ? (
+            <SourceDetails data={licensing.data} stacked />
+          ) : null}
+        </PageSection>
+      ) : null}
 
       <Can permission="establishments.view_sourcelink">
         <PageSection title={t("Source systems")}>
@@ -204,27 +234,6 @@ export default function EstablishmentDetailPage() {
           )}
         </PageSection>
       </Can>
-      <Can permission="inspections.view_inspection">
-        {visits.error ? (
-          <AppErrorState message={errorMessage(visits.error)} onRetry={() => visits.refetch()} />
-        ) : (
-          <InspectionTable
-            title={t("Inspection history")}
-            rows={visits.data?.results ?? []}
-            loading={visits.isPending}
-            page={page}
-            pageSize={pageSize}
-            totalItems={visitCount}
-            totalPages={pageCount(visitCount, pageSize)}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => {
-              setPageSize(size);
-              setPage(1);
-            }}
-            emptyMessage={t("No inspections in this selection.")}
-          />
-        )}
-      </Can>
 
       <PageSection
         title={t("Collection submissions")}
@@ -232,42 +241,42 @@ export default function EstablishmentDetailPage() {
           "Forms submitted for this establishment through the configured collection service.",
         )}
         actions={
-          <Can permission="inspections.add_inspection">
+          <Can permission="inspections.deploy_checklist">
             <Button
               variant="outline"
-              disabled={syncKobo.isPending}
-              onClick={() => syncKobo.mutate()}
+              disabled={syncSubmissions.isPending}
+              onClick={() => syncSubmissions.mutate()}
             >
               <RefreshCw />
-              {syncKobo.isPending ? t("Syncing…") : t("Sync submissions")}
+              {syncSubmissions.isPending ? t("Syncing…") : t("Sync submissions")}
             </Button>
           </Can>
         }
       >
-        {syncKobo.error ? (
+        {syncSubmissions.error ? (
           <div role="alert" className="error-box">
-            {errorMessage(syncKobo.error)}
+            {errorMessage(syncSubmissions.error)}
           </div>
         ) : null}
-        {koboSubmissions.isPending ? (
+        {submissions.isPending ? (
           <AppLoader label={t("Loading…")} className="py-8" />
-        ) : koboSubmissions.error ? (
+        ) : submissions.error ? (
           <AppErrorState
-            message={errorMessage(koboSubmissions.error)}
-            onRetry={() => koboSubmissions.refetch()}
+            message={errorMessage(submissions.error)}
+            onRetry={() => submissions.refetch()}
           />
         ) : (
           <AppTable
             className="min-w-[500px]"
             pagination={{
-              page: koboPage,
-              pageSize: koboPageSize,
-              totalPages: pageCount(koboCount, koboPageSize),
-              totalItems: koboCount,
-              onPageChange: setKoboPage,
+              page: submissionPage,
+              pageSize: submissionPageSize,
+              totalPages: pageCount(submissionCount, submissionPageSize),
+              totalItems: submissionCount,
+              onPageChange: setSubmissionPage,
               onPageSizeChange: (size) => {
-                setKoboPageSize(size);
-                setKoboPage(1);
+                setSubmissionPageSize(size);
+                setSubmissionPage(1);
               },
             }}
           >
@@ -280,7 +289,7 @@ export default function EstablishmentDetailPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(koboSubmissions.data?.results ?? []).map((submission) => (
+              {(submissions.data?.results ?? []).map((submission) => (
                 <TableRow key={submission.id}>
                   <TableCell>
                     <SystemDateTime value={submission.submitted_at} includeTime />
@@ -289,7 +298,7 @@ export default function EstablishmentDetailPage() {
                     <div className="space-y-1">
                       <span className="block max-w-[170px] truncate">
                         {submission.checklist_name ?? "—"}
-                        {submission.checklist_version ? ` · ${submission.checklist_version}` : ""}
+                        {submission.form_version ? ` · ${submission.form_version}` : ""}
                       </span>
                       <small className="muted block">
                         <code>{submission.submission_id}</code>
@@ -308,10 +317,10 @@ export default function EstablishmentDetailPage() {
                       >
                         {t("View data")}
                       </Button>
-                      {submission.kobo_url ? (
+                      {submission.form_url ? (
                         <a
                           className="text-link"
-                          href={submission.kobo_url}
+                          href={submission.form_url}
                           target="_blank"
                           rel="noreferrer"
                           title={t("Open collection service")}
@@ -324,7 +333,7 @@ export default function EstablishmentDetailPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {koboCount === 0 ? (
+              {submissionCount === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
                     {t("No Collection submissions yet. Press Sync submissions to pull new forms.")}
@@ -341,7 +350,7 @@ export default function EstablishmentDetailPage() {
         onOpenChange={(open) => {
           if (!open) setSelectedSubmission(null);
         }}
-        title={t("KoBo inspection")}
+        title={t("Submission")}
         size="xl"
         contentClassName="max-h-[90vh] overflow-y-auto"
       >
@@ -356,10 +365,10 @@ export default function EstablishmentDetailPage() {
               <span className="muted">
                 <SystemDateTime value={selectedSubmission.submitted_at} includeTime />
               </span>
-              {selectedSubmission.kobo_url ? (
+              {selectedSubmission.form_url ? (
                 <a
                   className="text-link"
-                  href={selectedSubmission.kobo_url}
+                  href={selectedSubmission.form_url}
                   target="_blank"
                   rel="noreferrer"
                 >

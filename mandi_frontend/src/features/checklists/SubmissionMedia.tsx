@@ -3,17 +3,17 @@ import { useTranslation } from "react-i18next";
 
 import { useMediaUrl } from "@/features/checklists/useMediaUrl";
 import { mediaIconKind } from "@/features/checklists/useMediaUrl";
-import type { KoboMediaKind } from "@/lib/api";
+import type { MediaKind } from "@/lib/api";
 
 type SubmissionMediaProps = {
   url: string | null;
-  kind: KoboMediaKind | string;
+  kind: MediaKind | string;
   filename?: string;
   mimetype?: string;
   compact?: boolean;
 };
 
-/** Renders one KoBo upload: images inline, audio/video players, files as links. */
+/** Renders one collection upload: images inline, audio/video players, files as links. */
 export function SubmissionMedia({
   url,
   kind,

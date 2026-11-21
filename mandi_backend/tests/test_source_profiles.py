@@ -13,7 +13,7 @@ from apps.integrations.registry_sync import sync_all
 from apps.integrations.services import source_detail, source_search
 
 
-@override_settings(DEMO_INTEGRATIONS=False, LICENSING_BASE_URL="", LICENSING_REGISTRATION_API_KEY="", REGISTRATION_BASE_URL="http://registry.test", REGISTRATION_API_KEY="key")
+@override_settings(LICENSING_BASE_URL="", LICENSING_REGISTRATION_API_KEY="", REGISTRATION_BASE_URL="http://registry.test", REGISTRATION_API_KEY="key")
 class SourceProfilesTests(TestCase):
     def setUp(self):
         self.actor = get_user_model().objects.create_superuser(username="profile-manager", password="password")
@@ -93,7 +93,7 @@ class SourceProfilesTests(TestCase):
     def test_null_province_import_and_nested_business_details(self):
         self.raw["address"]["province"] = None
         obj = self.imported()
-        self.assertEqual(obj.province, "")
+        self.assertIsNone(obj.province)
         self.assertEqual(readable_address(self.raw["address"]["address"]), "Market · 1")
         details = application_details("pharmacy",self.raw)
         self.assertIn("Staff", str(details))

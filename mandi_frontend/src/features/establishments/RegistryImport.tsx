@@ -9,7 +9,7 @@ import { useApiQuery } from "@/features/shared/api";
 import { api, errorMessage, type Establishment } from "@/lib/api";
 import { useRegistryCatalog } from "./registry";
 
-type Candidate = { id: string; name: string; details: { province?: string }; is_demo: boolean };
+type Candidate = { id: string; name: string; details: { province?: string } };
 export default function RegistryImport() {
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState("registration");
@@ -110,7 +110,6 @@ export default function RegistryImport() {
                 {item.name} · {item.details.province || "Unknown province"}
                 <small className="block">
                   {item.id}
-                  {item.is_demo ? " · Demonstration record" : ""}
                 </small>
               </span>
               <Button

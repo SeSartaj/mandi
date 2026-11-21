@@ -11,13 +11,12 @@ from rest_framework.test import APIClient
 from apps.establishments.models import Establishment, EstablishmentType, ExternalSystem, SourceLink
 from apps.establishments.services import (save_establishment, import_establishment,
     refresh_identity, transfer_ownership, disconnect_source, establishment_choice_csv)
-from apps.inspections.models import Checklist, Inspection
-from apps.inspections.services import ingest_inspection, approve_inspection, capture_evidence
+from apps.inspections.models import Checklist
 from apps.integrations.registry import ADAPTERS, detail_with_field_ids
 from apps.integrations.services import source_search
 
 
-@override_settings(DEMO_INTEGRATIONS=True, LICENSING_BASE_URL="", REGISTRATION_BASE_URL="", REGISTRATION_API_KEY="")
+@override_settings(LICENSING_BASE_URL="", REGISTRATION_BASE_URL="", REGISTRATION_API_KEY="")
 class RegistryTests(TestCase):
     def setUp(self):
         self.actor = get_user_model().objects.create_superuser(username="registry-manager", password="test-password")
@@ -33,27 +32,25 @@ class RegistryTests(TestCase):
             return import_establishment(self.actor, "registration", "external-42", "pharmacy")
 
     def submission(self, establishment):
-        checklist = Checklist.objects.create(code="registry", name="Registry checklist", version="1", establishment_kind="pharmacy")
-        data = {"establishment_id": establishment.pk, "checklist_id": checklist.pk,
-            "inspected_on": date(2026, 11, 17), "kind": "brief", "team_ids": [self.actor.pk],
-            "provider": "test", "provider_form_id": "form", "submission_id": "one", "mapping_version": "1",
-            "summary": {"overall_percent": 80}}
-        return ingest_inspection(self.actor, data), data
+        Checklist.objects.create(
+            code="registry",
+            name="Registry checklist",
+            establishment_kind=EstablishmentType.objects.get(pk="pharmacy"),
+        )
 
     def test_native_attributes_and_custom_types(self):
         EstablishmentType.objects.create(code="laboratory", name="Laboratory")
-        obj = save_establishment(self.actor, {"name": "Lab", "province": "Kabul", "kind": "laboratory", "attributes": {"rooms": 3}})
-        self.assertEqual(obj.attributes, {"rooms": 3})
+        obj = save_establishment(self.actor, {"name": "Lab", "province": "Kabul", "kind": "laboratory"})
         self.assertIn(b"Laboratory", establishment_choice_csv(kind="laboratory"))
         result = self.client.get("/api/v1/registry/")
         self.assertIn({"code": "laboratory", "name": "Laboratory"}, result.data["types"])
-        checklist = Checklist(name="Lab", code="lab", version="1", establishment_kind="laboratory")
+        checklist = Checklist(name="Lab", code="lab", establishment_kind=EstablishmentType.objects.get(pk="laboratory"))
         checklist.full_clean()
         checklist.save()
-        self.assertEqual(checklist.establishment_kind, "laboratory")
+        self.assertEqual(checklist.establishment_kind_id, "laboratory")
 
     def test_invalid_type_or_attributes_rejected(self):
-        for extra in [{"kind": "invalid"}, {"attributes": []}, {"attributes": "bad"}]:
+        for extra in [{"kind": "invalid"}]:
             with self.assertRaises(ValidationError):
                 save_establishment(self.actor, {"name": "Invalid", "province": "Kabul", "kind": "pharmacy", **extra})
 
@@ -64,32 +61,20 @@ class RegistryTests(TestCase):
         fetch.assert_not_called()
         self.assertEqual(obj.pk, repeated.pk)
         self.assertEqual(obj.primary_source, "registration")
-        self.assertEqual(obj.source_links.get().details, {"name": "Registry pharmacy"})
-        self.assertEqual(obj.license_number, "LIC-42")
+        details = obj.source_links.get().details
+        self.assertEqual(details["name"], "Registry pharmacy")
+        self.assertEqual(details["province"], "Herat")
+        self.assertEqual(details["license_number"], "LIC-42")
         with self.assertRaises(ValidationError):
             import_establishment(self.actor, "registration", "external-42", "hospital")
 
     def test_primary_identity_read_only_and_disconnect_protected(self):
         obj = self.imported()
-        for key, value in [("name", "Changed"), ("province", "Kabul"), ("attributes", {"x": 1})]:
+        for key, value in [("name", "Changed")]:
             response = self.client.patch(f"/api/v1/establishments/{obj.pk}/", {key: value}, format="json")
             self.assertEqual(response.status_code, 400)
         with self.assertRaises(ValidationError):
             disconnect_source(self.actor, obj.pk, "registration")
-
-    def test_refresh_freezes_inspection_identity_and_preserves_approval_on_resync(self):
-        obj = self.imported()
-        inspection, data = self.submission(obj)
-        snapshot = deepcopy(inspection.establishment_snapshot)
-        approve_inspection(self.actor, inspection.pk)
-        with patch("apps.integrations.services.source_record", return_value=self.record("New registry name")):
-            refresh_identity(self.actor, obj.pk)
-        synced = ingest_inspection(self.actor, data)
-        self.assertEqual(synced.establishment_snapshot, snapshot)
-        self.assertTrue(synced.approved)
-        response = self.client.get(f"/api/v1/inspections/{inspection.pk}/")
-        self.assertEqual(response.data["establishment_name"], "Registry pharmacy")
-        self.assertEqual(Establishment.objects.get(pk=obj.pk).name, "New registry name")
 
     def test_outage_leaves_local_identity_intact(self):
         obj = self.imported()
@@ -143,39 +128,10 @@ class RegistryTests(TestCase):
         with self.assertRaisesMessage(ValidationError, "not configured"):
             source_search(self.actor, "registration", "pharmacy")
 
-    def test_evidence_selected_fields_only_and_approval_reset(self):
-        obj = self.imported()
-        inspection, _ = self.submission(obj)
-        approve_inspection(self.actor, inspection.pk)
-        details = detail_with_field_ids({"sections": [{"title": "License", "fields": [{"label": "Status", "value": "Active"}, {"label": "Other", "value": "Omitted"}]}]})
-        selected = details["sections"][0]["fields"][0]["id"]
-        with patch("apps.integrations.services.source_detail", return_value=details):
-            evidence = capture_evidence(self.actor, inspection.pk, "registration", [selected])
-        self.assertEqual(len(evidence.fields), 1)
-        self.assertEqual(evidence.fields[0]["value"], "Active")
-        inspection.refresh_from_db()
-        self.assertFalse(inspection.approved)
-        transfer_ownership(self.actor, obj.pk)
-        disconnect_source(self.actor, obj.pk, "registration")
-        evidence.refresh_from_db()
-        self.assertEqual(evidence.external_id, "external-42")
-
-    def test_stale_or_invalid_evidence_selection_rejected(self):
-        obj = self.imported()
-        inspection, _ = self.submission(obj)
-        old = detail_with_field_ids({"sections": [{"title": "License", "fields": [{"label": "Status", "value": "Active"}]}]})
-        new = detail_with_field_ids({"sections": [{"title": "License", "fields": [{"label": "Status", "value": "Expired"}]}]})
-        with patch("apps.integrations.services.source_detail", return_value=new):
-            with self.assertRaises(ValidationError):
-                capture_evidence(self.actor, inspection.pk, "registration", [old["sections"][0]["fields"][0]["id"]])
-        self.assertEqual(inspection.evidence.count(), 0)
-
     def test_mutation_permissions_enforced(self):
         user = get_user_model().objects.create_user(username="unauthorized")
         with self.assertRaises(PermissionDenied):
             import_establishment(user, "registration", "external-42", "pharmacy")
-        with self.assertRaises(PermissionDenied):
-            capture_evidence(user, 123, "registration", ["field"])
 
     def test_import_and_ownership_api(self):
         with patch("apps.integrations.services.source_record", return_value=self.record()):

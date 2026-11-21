@@ -1,5 +1,4 @@
 from apps.inspections import services as inspections
-from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -35,19 +34,25 @@ class ChecklistDetail(APIView):
         return Response(ChecklistSerializer(checklist).data)
 
 
+class ChecklistVersions(APIView):
+    def get(self, request, pk):
+        from apps.integrations import collection
+
+        return Response(collection.form_versions(request.user, pk))
+
+
 class ChecklistDeploy(APIView):
     def post(self, request, pk):
-        checklist = inspections.deploy_checklist(request.user, pk)
-        return Response(ChecklistSerializer(checklist).data)
+        from rest_framework import serializers
 
-
-class ChecklistLinkKobo(APIView):
-    def post(self, request, pk):
         class Input(serializers.Serializer):
-            asset_uid = serializers.CharField()
+            project_id = serializers.IntegerField(min_value=1, required=False)
+            force = serializers.BooleanField(default=False)
 
         values = validated(Input, request.data)
-        checklist = inspections.link_kobo_asset(request.user, pk, values["asset_uid"])
+        checklist = inspections.deploy_checklist(
+            request.user, pk, values.get("project_id"), values.get("force", False)
+        )
         return Response(ChecklistSerializer(checklist).data)
 
 

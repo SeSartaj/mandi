@@ -8,19 +8,15 @@ export default function WorkspaceHelp() {
   const sections = [
     [
       "Establishments",
-      "Search the registry before adding an establishment. Open a record to review its details, linked sources, and inspection history.",
+      "Search the registry before adding an establishment. Open a record to review its details, linked sources, and submitted forms.",
     ],
     [
-      "Inspections",
-      "Use Filters to narrow inspection records. Open an inspection and review its findings before approving it.",
+      "Submissions",
+      "Filter submissions by establishment type, establishment, and checklist. Open a submission to review its answers and files.",
     ],
     [
       "Checklists",
-      "Uploading saves a form in Mandi. Deploy publishes it to KoBo. Sync retrieves submitted responses. Open a checklist to browse its submissions.",
-    ],
-    [
-      "Coverage",
-      "Coverage counts distinct establishments separately from inspection visits. Use filters to choose the scope of the report.",
+      "Uploading saves a form in Mandi. Deploy publishes it to the collection service. Sync retrieves submitted responses. Open a checklist to browse its submissions.",
     ],
   ];
   return (

@@ -78,11 +78,6 @@ export default function RegistryOwnership({ establishment }: { establishment: Es
           registry to be online.
         </p>
       )}
-      {establishment.attributes && Object.keys(establishment.attributes).length > 0 && (
-        <pre className="overflow-auto text-sm">
-          {JSON.stringify(establishment.attributes, null, 2)}
-        </pre>
-      )}
     </div>
   );
 }

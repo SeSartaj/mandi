@@ -2,10 +2,12 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import type { Checklist } from "@/lib/api";
 
-export function DeploymentBadge({ status }: { status: Checklist["kobo_deployment_status"] }) {
+type DeploymentStatus = Checklist["collection"]["status"];
+
+export function DeploymentBadge({ status }: { status: DeploymentStatus }) {
   const { t } = useTranslation();
   const variants: Record<
-    Checklist["kobo_deployment_status"],
+    DeploymentStatus,
     "default" | "secondary" | "destructive" | "outline"
   > = {
     not_deployed: "secondary",
@@ -13,7 +15,7 @@ export function DeploymentBadge({ status }: { status: Checklist["kobo_deployment
     deployed: "default",
     failed: "destructive",
   };
-  const labels: Record<Checklist["kobo_deployment_status"], string> = {
+  const labels: Record<DeploymentStatus, string> = {
     not_deployed: "Not deployed",
     deploying: "Deploying…",
     deployed: "Deployed",

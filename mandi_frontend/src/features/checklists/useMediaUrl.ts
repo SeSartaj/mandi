@@ -2,10 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
-import type { KoboMediaKind } from "@/lib/api";
+import type { MediaKind } from "@/lib/api";
 
 /**
- * Fetch a KoBo attachment through the API (which adds the token) and expose it
+ * Fetch a collection attachment through the API (which adds the token) and expose it
  * as an object URL so `<img>`, `<audio>` and `<video>` can render it.
  */
 export function useMediaUrl(path: string | null | undefined) {
@@ -36,7 +36,7 @@ export function useMediaUrl(path: string | null | undefined) {
   return { ...query, data: objectUrl };
 }
 
-export function mediaIconKind(kind: KoboMediaKind | string): KoboMediaKind {
+export function mediaIconKind(kind: MediaKind | string): MediaKind {
   if (kind === "image" || kind === "audio" || kind === "video" || kind === "pdf") {
     return kind;
   }

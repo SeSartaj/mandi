@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SubmissionMedia } from "@/features/checklists/SubmissionMedia";
 import { useApiQuery } from "@/features/shared/api";
-import type { KoboAnswer, KoboSubmission } from "@/lib/api";
+import type { SubmissionAnswer, Submission } from "@/lib/api";
 import { errorMessage } from "@/lib/api";
 
 function scoreVariant(percent: number | null | undefined) {
@@ -23,7 +23,7 @@ function scoreVariant(percent: number | null | undefined) {
   return "destructive" as const;
 }
 
-function geoHref(answer: KoboAnswer): string | null {
+function geoHref(answer: SubmissionAnswer): string | null {
   if (answer.type !== "geopoint") return null;
   const source = Array.isArray(answer.value)
     ? `${answer.value[0]} ${answer.value[1]}`
@@ -43,9 +43,9 @@ function geoHref(answer: KoboAnswer): string | null {
   return `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=16/${latitude}/${longitude}`;
 }
 
-type AnswerGroup = { label: string; answers: KoboAnswer[] };
+type AnswerGroup = { label: string; answers: SubmissionAnswer[] };
 
-function groupAnswers(answers: KoboAnswer[]): AnswerGroup[] {
+function groupAnswers(answers: SubmissionAnswer[]): AnswerGroup[] {
   const groups: AnswerGroup[] = [];
   for (const answer of answers) {
     const label = answer.group || "";
@@ -62,8 +62,8 @@ function groupAnswers(answers: KoboAnswer[]): AnswerGroup[] {
 export default function SubmissionDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams();
-  const submission = useApiQuery<KoboSubmission>(
-    ["kobo-submission", id],
+  const submission = useApiQuery<Submission>(
+    ["submission", id],
     `/collection-submissions/${id}/`,
   );
 
@@ -113,6 +113,14 @@ export default function SubmissionDetailPage() {
             </span>
             <span>·</span>
             <code>{data.submission_id}</code>
+            {data.form_version ? (
+              <>
+                <span>·</span>
+                <span>
+                  {t("Form version")} <code>{data.form_version}</code>
+                </span>
+              </>
+            ) : null}
             {percent !== null && percent !== undefined ? (
               <Badge variant={scoreVariant(percent)}>
                 {percent}%{data.scores?.max ? ` · ${data.scores.score}/${data.scores.max}` : ""}
@@ -123,8 +131,8 @@ export default function SubmissionDetailPage() {
           </span>
         }
         others={
-          data.kobo_url ? (
-            <a className="text-link" href={data.kobo_url} target="_blank" rel="noreferrer">
+          data.form_url ? (
+            <a className="text-link" href={data.form_url} target="_blank" rel="noreferrer">
               <ExternalLink className="size-4" />
               {t("Open collection service")}
             </a>

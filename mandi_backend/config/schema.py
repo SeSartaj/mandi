@@ -18,10 +18,6 @@ def openapi_document():
         api.EstablishmentSerializer,
         api.SourceLinkSerializer,
         api.ChecklistSerializer,
-        api.KoboSubmissionSerializer,
-        api.InspectionSerializer,
-        api.IngestInput,
-        api.SummaryInput,
     ]
     schemas = {cls.__name__: mapper.map_serializer(cls()) for cls in classes}
 
@@ -110,17 +106,12 @@ def openapi_document():
             )
         for name in ["pk", "source"]:
             if "{" + name + "}" in path:
-                kind = (
-                    "integer"
-                    if path.startswith("/inspections/") and name == "pk"
-                    else "string"
-                )
                 op["parameters"].append(
                     {
                         "name": name,
                         "in": "path",
                         "required": True,
-                        "schema": {"type": kind},
+                        "schema": {"type": "string"},
                     }
                 )
         paths.setdefault(path, {})[method] = op
@@ -132,11 +123,6 @@ def openapi_document():
     route("/establishments/{pk}/refresh/", "post", "Refresh primary registry identity; local copy survives outages", ref("EstablishmentSerializer"))
     route("/establishments/{pk}/ownership/", "post", "Transfer identity ownership (null source means Mandi)", ref("EstablishmentSerializer"),
           {"type": "object", "required": ["source"], "properties": {"source": {"type": "string", "nullable": True}}})
-    route("/inspections/{pk}/evidence/", "get", "Historical selected external evidence", array({"type": "object"}))
-    route("/inspections/{pk}/evidence/", "post", "Capture selected current source fields and clear approval",
-          {"type": "object", "properties": {"id": {"type": "integer"}}},
-          {"type": "object", "required": ["source", "selected_fields"], "properties": {"source": {"type": "string"}, "selected_fields": array({"type": "string", "description": "Stable content hash from source detail fields requested with purpose=evidence; stale values are rejected"})}}, code=201)
-
     route(
         "/auth/login/",
         "post",
@@ -223,35 +209,9 @@ def openapi_document():
     route(
         "/sources/{source}/",
         "get",
-        "Search demonstration source records",
+        "Search external source records",
         {"type": "object"},
         query=True,
-    )
-    route(
-        "/inspections/",
-        "get",
-        "Filter inspection visits",
-        page(ref("InspectionSerializer")),
-        query=True,
-    )
-    route(
-        "/inspections/{pk}/",
-        "get",
-        "Inspection summary, team, and approval",
-        ref("InspectionSerializer"),
-    )
-    route(
-        "/inspections/{pk}/approve/",
-        "post",
-        "Approve inspection; requires approve_inspection permission",
-        ref("InspectionSerializer"),
-    )
-    route(
-        "/integrations/ingest/",
-        "post",
-        "Idempotent normalized provider ingestion; changed results reset approval",
-        ref("InspectionSerializer"),
-        ref("IngestInput"),
     )
     route(
         "/integrations/establishment-choices/",
@@ -293,11 +253,40 @@ def openapi_document():
         ref("ChecklistSerializer"),
     )
     route(
-        "/checklists/{pk}/submissions/",
+        "/checklists/{pk}/collection-submissions/",
         "get",
         "Submissions of one checklist; filter by search, establishment or date",
-        page(ref("KoboSubmissionSerializer")),
+        page({"type": "object"}),
         params=["search", "establishment_id", "date_from", "date_to", "page_size"],
+    )
+    route(
+        "/checklists/{pk}/versions/",
+        "get",
+        "Published form versions of a checklist's deployed form",
+        array(
+            {
+                "type": "object",
+                "properties": {
+                    "version": {"type": "string"},
+                    "published_at": {"type": "string", "nullable": True},
+                },
+            }
+        ),
+    )
+    route(
+        "/submissions/",
+        "get",
+        "All submissions filtered by establishment type, establishment or checklist",
+        page({"type": "object"}),
+        params=[
+            "search",
+            "establishment_kind",
+            "establishment_id",
+            "checklist_id",
+            "date_from",
+            "date_to",
+            "page_size",
+        ],
     )
     route(
         "/checklists/{pk}/deploy/",
@@ -306,68 +295,16 @@ def openapi_document():
         ref("ChecklistSerializer"),
     )
     route(
-        "/checklists/{pk}/link-kobo/",
-        "post",
-        "Attach an existing KoBo project UID to a checklist",
-        ref("ChecklistSerializer"),
-        {
-            "type": "object",
-            "required": ["asset_uid"],
-            "properties": {"asset_uid": {"type": "string"}},
-        },
-    )
-    route(
-        "/kobo-submissions/{pk}/",
+        "/collection-submissions/{pk}/",
         "get",
-        "One submission with scores, typed answers and attachments",
-        ref("KoboSubmissionSerializer"),
-    )
-    route(
-        "/kobo-submissions/{pk}/attachments/{index}/",
-        "get",
-        "Stream one uploaded file from KoBo through Mandi",
-        {"type": "string", "format": "binary"},
-    )
-    route(
-        "/establishments/{pk}/kobo-submissions/",
-        "get",
-        "Stored KoBo submissions for an establishment",
-        page(ref("KoboSubmissionSerializer")),
-        query=True,
-    )
-    route(
-        "/integrations/kobo/sync/",
-        "post",
-        "Fetch KoBo submissions and attach them to Mandi establishments",
-        {"type": "object"},
+        "One collection submission with scores, typed answers and attachments",
         {"type": "object"},
     )
     route(
-        "/integrations/kobo/establishments.csv",
+        "/integrations/establishments.csv",
         "get",
         "CSV of Mandi establishments for an XLSForm select_one_from_file question",
         {"type": "string", "format": "binary"},
-    )
-    route(
-        "/reports/coverage/",
-        "get",
-        "Distinct establishment coverage and approval counts",
-        {
-            "type": "object",
-            "properties": {
-                k: {"type": "number"}
-                for k in [
-                    "establishments",
-                    "inspected",
-                    "uninspected",
-                    "visits",
-                    "approved",
-                    "unapproved",
-                    "coverage_percent",
-                ]
-            },
-        },
-        query=True,
     )
     route(
         "/employees/{pk}/",
@@ -408,7 +345,7 @@ def openapi_document():
     route(
         "/integrations/collection/sync/",
         "post",
-        "Import provider submissions and normalized inspection summaries",
+        "Import provider submissions into the local submissions list",
         {"type": "object"},
         {"type": "object", "properties": {"checklist_id": {"type": "integer"}}},
     )

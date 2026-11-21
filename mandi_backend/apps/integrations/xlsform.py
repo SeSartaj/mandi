@@ -12,6 +12,26 @@ class XlsFormError(Exception):
 
 _DARI_LABEL_TOKENS = ("dari", "persian", "farsi", "pashto", "::fa", "::ps", "(fa)", "(ps)")
 
+# Fields shown to the collector after selecting an establishment. They are
+# pulled from establishments.csv with pulldata(), so no API call is needed
+# while collecting offline.
+ESTABLISHMENT_DETAIL_FIELDS = (
+    ("province", "Province", "ولایت"),
+    ("district", "District", "ولسوالی"),
+    ("address", "Address", "آدرس"),
+    ("license_number", "License number", "شماره جواز"),
+    ("license_issue_date", "License issue date", "تاریخ صدور جواز"),
+    ("license_expiry_date", "License expiry date", "تاریخ انقضای جواز"),
+    ("grade", "Grade", "درجه"),
+    ("owner", "Owner", "مالک"),
+    ("owner_phone", "Owner phone", "شماره تلفن مالک"),
+    ("owner_email", "Owner email", "آدرس الکترونیکی مالک"),
+    ("technical_manager", "Technical manager", "مسئول فنی"),
+    ("technical_manager_phone", "Technical manager phone", "شماره تلفن مسئول فنی"),
+    ("technical_staff_count", "Technical staff count", "تعداد کارمندان فنی"),
+    ("activities", "Activities", "فعالیت‌ها"),
+)
+
 
 def _establishment_label(label_header):
     """Pick the establishment question label that matches the form language."""
@@ -58,8 +78,17 @@ def _as_xlsx(filename, content):
         return converted.read_bytes(), f"{Path(filename).stem}.xlsx"
 
 
+def _ensure_column(survey, header_row, columns, name):
+    if name in columns:
+        return columns[name]
+    column = survey.max_column + 1
+    survey.cell(row=header_row, column=column, value=name)
+    columns[name] = column
+    return column
+
+
 def add_establishment_question(filename, content):
-    """Ensure the first survey question selects a Mandi establishment from the CSV."""
+    """Ensure the survey selects a Mandi establishment and shows its details."""
     xlsx_content, xlsx_name = _as_xlsx(filename, content)
     workbook = load_workbook(io.BytesIO(xlsx_content))
     if "survey" not in workbook.sheetnames:
@@ -90,30 +119,80 @@ def add_establishment_question(filename, content):
     if label_column is None:
         raise XlsFormError("The XLSForm survey sheet has no label column.")
     label_header = str(survey.cell(row=header_row, column=label_column).value or "")
+    dari = any(token in label_header.lower() for token in _DARI_LABEL_TOKENS)
 
+    name_column = columns["name"]
+    establishment_row = None
+    details_present = False
     for row in range(header_row + 1, survey.max_row + 1):
-        if survey.cell(row=row, column=columns["name"]).value == "establishment_id":
-            return xlsx_content, xlsx_name
+        value = survey.cell(row=row, column=name_column).value
+        if value == "establishment_id":
+            establishment_row = row
+        elif isinstance(value, str) and value.startswith("mandi_est_"):
+            details_present = True
 
-    survey.insert_rows(header_row + 1)
-    values = {
-        "type": "select_one_from_file establishments.csv",
-        "name": "establishment_id",
-        "label": _establishment_label(label_header),
-        "appearance": "search",
-        "required": "yes",
-    }
-    if "appearance" not in columns:
-        columns["appearance"] = survey.max_column + 1
-        survey.cell(row=header_row, column=columns["appearance"], value="appearance")
-    if "required" not in columns:
-        columns["required"] = survey.max_column + 1
-        survey.cell(row=header_row, column=columns["required"], value="required")
-    for key, value in values.items():
-        column = label_column if key == "label" else columns.get(key)
-        if column is None:
-            continue
-        survey.cell(row=header_row + 1, column=column, value=value)
+    appearance = _ensure_column(survey, header_row, columns, "appearance")
+    required = _ensure_column(survey, header_row, columns, "required")
+    calculation = _ensure_column(survey, header_row, columns, "calculation")
+    relevant = _ensure_column(survey, header_row, columns, "relevant")
+
+    if establishment_row is None:
+        survey.insert_rows(header_row + 1)
+        establishment_row = header_row + 1
+        added_establishment = True
+        values = {
+            "type": "select_one_from_file establishments.csv",
+            "name": "establishment_id",
+            "label": _establishment_label(label_header),
+            "appearance": "search",
+            "required": "yes",
+        }
+        for key, value in values.items():
+            column = label_column if key == "label" else columns.get(key)
+            if column is not None:
+                survey.cell(row=establishment_row, column=column, value=value)
+    else:
+        added_establishment = False
+
+    if details_present:
+        if not added_establishment:
+            return xlsx_content, xlsx_name
+        output = io.BytesIO()
+        workbook.save(output)
+        return output.getvalue(), xlsx_name
+
+    detail_rows = [
+        {
+            "type": "begin_group",
+            "name": "mandi_est_details",
+            "label": "معلومات تأسیسات" if dari else "Establishment details",
+            "appearance": "field-list",
+        }
+    ]
+    for key, english, dari_label in ESTABLISHMENT_DETAIL_FIELDS:
+        calculate_name = f"mandi_est_{key}"
+        detail_rows.append(
+            {
+                "type": "calculate",
+                "name": calculate_name,
+                "calculation": f"pulldata('establishments', '{key}', 'name', ${{establishment_id}})",
+            }
+        )
+        detail_rows.append(
+            {
+                "type": "note",
+                "name": f"{calculate_name}_note",
+                "label": f"{dari_label if dari else english}: ${{{calculate_name}}}",
+                "relevant": f"string-length(${{{calculate_name}}}) > 0",
+            }
+        )
+    detail_rows.append({"type": "end_group"})
+    survey.insert_rows(establishment_row + 1, amount=len(detail_rows))
+    for offset, values in enumerate(detail_rows, start=1):
+        for key, value in values.items():
+            column = label_column if key == "label" else columns.get(key)
+            if column is not None:
+                survey.cell(row=establishment_row + offset, column=column, value=value)
 
     output = io.BytesIO()
     workbook.save(output)
@@ -152,7 +231,6 @@ def read_checklist_metadata(filename, content):
         result = {
             "name": metadata.get("form_title") or Path(filename).stem,
             "code": metadata.get("form_id", ""),
-            "version": metadata.get("version", ""),
         }
         # Establishment type is a Mandi extension, not a standard XLSForm setting.
         kind = metadata.get("establishment_kind", "").lower()
@@ -161,6 +239,33 @@ def read_checklist_metadata(filename, content):
         return result
     finally:
         workbook.close()
+
+
+def uses_establishment_type_filter(workbook):
+    """True when the survey filters its establishment choice by a type question."""
+    if "survey" not in workbook.sheetnames:
+        return False
+    survey = workbook["survey"]
+    header_row = None
+    columns = {}
+    for row in range(1, min(survey.max_row, 10) + 1):
+        values = {
+            str(survey.cell(row=row, column=column).value).strip().lower(): column
+            for column in range(1, survey.max_column + 1)
+            if survey.cell(row=row, column=column).value
+        }
+        if "type" in values and "name" in values:
+            header_row = row
+            columns = values
+            break
+    if header_row is None or "choice_filter" not in columns:
+        return False
+    filter_column = columns["choice_filter"]
+    for row in range(header_row + 1, survey.max_row + 1):
+        value = survey.cell(row=row, column=filter_column).value
+        if value and "establishment_type" in str(value):
+            return True
+    return False
 
 
 def set_form_title(content, title):

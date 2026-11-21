@@ -23,9 +23,9 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useListParams } from "@/hooks/useListParams";
 import { SimpleDatePicker } from "@/components/ui/custom/CustomDatePickerType";
 import { useSystemCalendar } from "@/hooks/use-system-calendar";
-import { validDateRange } from "@/features/inspections/filter-state";
+import { validDateRange } from "@/features/shared/dates";
 import { useTablePageSize } from "@/hooks/useTablePageSize";
-import type { Checklist, KoboSubmission, Page } from "@/lib/api";
+import type { Checklist, Page, Submission } from "@/lib/api";
 import { api, errorMessage } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
@@ -41,7 +41,7 @@ export default function ChecklistDetailPage() {
   const { id } = useParams();
   const client = useQueryClient();
   const session = useSession();
-  const canSync = (session?.permissions ?? []).includes("inspections.add_inspection");
+  const canSync = (session?.permissions ?? []).includes("inspections.deploy_checklist");
   const { params, update, page, setPage } = useListParams();
   const calendar = useSystemCalendar();
   const search = params.get("search") ?? "";
@@ -53,6 +53,12 @@ export default function ChecklistDetailPage() {
   const [pageSize, setPageSize] = useTablePageSize();
 
   const checklist = useApiQuery<Checklist>(["checklist", id], `/checklists/${id}/`);
+  const versions = useApiQuery<{ version: string; published_at: string | null }[]>(
+    ["checklist-versions", id],
+    `/checklists/${id}/versions/`,
+    undefined,
+    { enabled: checklist.data?.collection.status === "deployed" },
+  );
   const kind = checklist.data?.establishment_kind;
   const establishments = useQuery({
     queryKey: ["establishment-choices", kind],
@@ -64,7 +70,7 @@ export default function ChecklistDetailPage() {
         })
       ).data,
   });
-  const submissions = useApiQuery<Page<KoboSubmission>>(
+  const submissions = useApiQuery<Page<Submission>>(
     ["checklist-submissions", id],
     `/checklists/${id}/collection-submissions/`,
     {
@@ -120,8 +126,6 @@ export default function ChecklistDetailPage() {
           <span className="inline-flex flex-wrap items-center gap-2">
             <code>{data.code}</code>
             <span>·</span>
-            <span>{data.version}</span>
-            <span>·</span>
             <span>{t(choiceLabel(data.establishment_kind))}</span>
             <DeploymentBadge status={data.collection.status} />
           </span>
@@ -134,7 +138,7 @@ export default function ChecklistDetailPage() {
                 {t("Open collection service")}
               </a>
             ) : null}
-            <Can permission="inspections.add_inspection">
+            <Can permission="inspections.deploy_checklist">
               <Button
                 variant="outline"
                 disabled={sync.isPending || !data.collection.form_id}
@@ -246,6 +250,7 @@ export default function ChecklistDetailPage() {
                 <TableRow>
                   <TableHead>{t("Submitted")}</TableHead>
                   <TableHead>{t("Establishment")}</TableHead>
+                  <TableHead>{t("Form version")}</TableHead>
                   <TableHead>{t("Score")}</TableHead>
                   <TableHead>{t("Files")}</TableHead>
                 </TableRow>
@@ -267,6 +272,13 @@ export default function ChecklistDetailPage() {
                       </Link>
                     </TableCell>
                     <TableCell>
+                      {submission.form_version ? (
+                        <code>{submission.form_version}</code>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       {submission.scores?.percent === null ||
                       submission.scores?.percent === undefined ? (
                         <span className="text-muted-foreground">{t("No score")}</span>
@@ -281,7 +293,7 @@ export default function ChecklistDetailPage() {
                 ))}
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-muted-foreground py-8 text-center">
+                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
                       {filtersActive
                         ? t("No submissions match these filters.")
                         : t("No submissions yet. Press Sync submissions to pull new forms.")}
@@ -292,6 +304,37 @@ export default function ChecklistDetailPage() {
             </AppTable>
           )}
         </div>
+      </PageSection>
+
+      <PageSection
+        title={t("Form versions")}
+        description={t("Published versions of this form in the collection service.")}
+      >
+        {versions.isPending ? (
+          <AppLoader label={t("Loading…")} className="py-6" />
+        ) : versions.error ? (
+          <AppErrorState
+            message={errorMessage(versions.error)}
+            onRetry={() => versions.refetch()}
+          />
+        ) : (versions.data ?? []).length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            {t("No published versions yet. Deploy the form first.")}
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {(versions.data ?? []).map((item) => (
+              <li key={item.version} className="flex flex-wrap items-center gap-3 text-sm">
+                <code>{item.version}</code>
+                {item.published_at ? (
+                  <span className="text-muted-foreground">
+                    <SystemDateTime value={item.published_at} includeTime />
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
       </PageSection>
     </div>
   );

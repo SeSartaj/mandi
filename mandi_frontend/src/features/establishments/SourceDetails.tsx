@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 export type SourceDetail = {
   name: string;
   application_id: string;
-  is_demo: boolean;
   notice?: string;
   via?: string;
   sections: {
@@ -150,59 +149,84 @@ export function SourceValue({ value }: { value: unknown }) {
     </span>
   );
 }
-export default function SourceDetails({ data }: { data: SourceDetail }) {
+function SectionFields({ section }: { section: SourceDetail["sections"][number] }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <dl className="grid min-w-0 gap-x-8 gap-y-5 sm:grid-cols-2">
+        {section.fields.map((field, i) => (
+          <div
+            key={i}
+            className={
+              typeof field.value === "object" && field.value !== null
+                ? "min-w-0 sm:col-span-2"
+                : "min-w-0"
+            }
+          >
+            <dt
+              className={
+                typeof field.value === "object" && field.value !== null
+                  ? "mb-2 text-sm font-semibold"
+                  : "text-muted-foreground mb-1 text-sm"
+              }
+            >
+              {t(field.label)}
+            </dt>
+            <dd
+              className={
+                typeof field.value === "object" && field.value !== null
+                  ? "bg-muted/10 rounded-lg border p-4 text-sm"
+                  : "text-sm"
+              }
+            >
+              <SourceValue value={field.value} />
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {section.location && <DeferredMap location={section.location} />}
+    </>
+  );
+}
+
+export default function SourceDetails({
+  data,
+  stacked = false,
+}: {
+  data: SourceDetail;
+  stacked?: boolean;
+}) {
   const { t } = useTranslation();
   return (
     <div className="space-y-5">
       {data.notice && <p className="text-muted-foreground text-sm">{t(data.notice)}</p>}
-      {!!data.sections.length && (
-        <Tabs key={data.application_id} defaultValue="section-0">
-          <TabsList aria-label={t("Source details")}>
+      {!!data.sections.length &&
+        (stacked ? (
+          <div className="space-y-6">
             {data.sections.map((section, index) => (
-              <TabsTrigger key={index} value={`section-${index}`}>
-                {t(section.title)}
-              </TabsTrigger>
+              <section key={index} className="space-y-3">
+                <h3 className="font-semibold">{t(section.title)}</h3>
+                <SectionFields section={section} />
+              </section>
             ))}
-          </TabsList>
-          {data.sections.map((section, index) => (
-            <TabsContent key={index} value={`section-${index}`} className="space-y-3 pt-3">
-              <h3 className="font-semibold">{t(section.title)}</h3>
-              <dl className="grid min-w-0 gap-x-8 gap-y-5 sm:grid-cols-2">
-                {section.fields.map((field, i) => (
-                  <div
-                    key={i}
-                    className={
-                      typeof field.value === "object" && field.value !== null
-                        ? "min-w-0 sm:col-span-2"
-                        : "min-w-0"
-                    }
-                  >
-                    <dt
-                      className={
-                        typeof field.value === "object" && field.value !== null
-                          ? "mb-2 text-sm font-semibold"
-                          : "text-muted-foreground mb-1 text-sm"
-                      }
-                    >
-                      {t(field.label)}
-                    </dt>
-                    <dd
-                      className={
-                        typeof field.value === "object" && field.value !== null
-                          ? "bg-muted/10 rounded-lg border p-4 text-sm"
-                          : "text-sm"
-                      }
-                    >
-                      <SourceValue value={field.value} />
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              {section.location && <DeferredMap location={section.location} />}
-            </TabsContent>
-          ))}
-        </Tabs>
-      )}
+          </div>
+        ) : (
+          <Tabs key={data.application_id} defaultValue="section-0">
+            <TabsList aria-label={t("Source details")}>
+              {data.sections.map((section, index) => (
+                <TabsTrigger key={index} value={`section-${index}`}>
+                  {t(section.title)}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {data.sections.map((section, index) => (
+              <TabsContent key={index} value={`section-${index}`} className="space-y-3 pt-3">
+                <h3 className="font-semibold">{t(section.title)}</h3>
+                <SectionFields section={section} />
+              </TabsContent>
+            ))}
+          </Tabs>
+        ))}
       {!data.sections.length && !data.notice && (
         <p className="text-muted-foreground">{t("No details returned by this source.")}</p>
       )}

@@ -27,15 +27,16 @@ class ReadOnlyAdmin(admin.ModelAdmin):
 @admin.register(Establishment)
 class EstablishmentAdmin(ReadOnlyAdmin):
     list_display = ("name", "kind", "province", "district", "created_at")
-    list_filter = ("kind", "province")
-    search_fields = ("name", "province", "district", "address", "phone")
+    list_filter = ("kind", "province", "district")
+    search_fields = ("name", "address", "province__name", "district__name")
+    list_select_related = ("province", "district")
     ordering = ("name",)
 
 
 @admin.register(SourceLink)
 class SourceLinkAdmin(ReadOnlyAdmin):
-    list_display = ("establishment", "source", "external_id", "is_demo", "linked_by", "linked_at")
-    list_filter = ("source", "is_demo")
+    list_display = ("establishment", "source", "external_id", "linked_by", "linked_at")
+    list_filter = ("source",)
     search_fields = ("establishment__name", "external_id")
     list_select_related = ("establishment", "linked_by")
 

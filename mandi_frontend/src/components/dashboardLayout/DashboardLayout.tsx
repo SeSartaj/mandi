@@ -19,10 +19,8 @@ export default function DashboardLayout() {
     const section = pathname.split("/")[1];
     const titles: Record<string, string> = {
       establishments: "Establishments",
-      inspections: "Inspections",
       checklists: "Checklists",
-      submissions: "Submission",
-      reports: "Coverage",
+      submissions: "Submissions",
       employees: "Employees",
     };
     document.title = `${t(titles[section] ?? (section ? "Page not found." : "Overview"))} · Mandi`;

@@ -12,7 +12,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
-  Activity,
   Building2,
   ClipboardCheck,
   FileSpreadsheet,
@@ -23,11 +22,10 @@ import { Link, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Can } from "@/components/Can";
 const items = [
-  ["/", "Overview", LayoutDashboard, "inspections.view_inspection"],
+  ["/", "Overview", LayoutDashboard, "establishments.view_establishment"],
   ["/establishments", "Establishments", Building2, "establishments.view_establishment"],
-  ["/inspections", "Inspections", ClipboardCheck, "inspections.view_inspection"],
+  ["/submissions", "Submissions", ClipboardCheck, "establishments.view_establishment"],
   ["/checklists", "Checklists", FileSpreadsheet, "inspections.view_checklist"],
-  ["/reports", "Coverage", Activity, "inspections.view_inspection"],
   ["/employees", "Employees", Users, "accounts.view_user"],
 ] as const;
 export function NavMain() {

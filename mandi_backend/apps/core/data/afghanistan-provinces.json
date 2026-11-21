@@ -1,0 +1,1124 @@
+[
+  {
+    "id": "AF17",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "بدخشان",
+      "en": "Badakhshan",
+      "slug": "badakhshan-af17"
+    },
+    "code": {
+      "id": "AF17",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 28
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "37.038",
+      "lon": "71.456"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/badakhshan-af17/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF20",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "سمنگان",
+      "en": "Samangan",
+      "slug": "samangan-af20"
+    },
+    "code": {
+      "id": "AF20",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 8
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "35.972",
+      "lon": "67.702"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/samangan-af20/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF05",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "لوگر",
+      "en": "Logar",
+      "slug": "logar-af05"
+    },
+    "code": {
+      "id": "AF05",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 7
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "34.013",
+      "lon": "69.168"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/logar-af05/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF12",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "پکتیکا",
+      "en": "Paktika",
+      "slug": "paktika-af12"
+    },
+    "code": {
+      "id": "AF12",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 19
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "32.477",
+      "lon": "68.744"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/paktika-af12/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF22",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "سرپل",
+      "en": "Sar-e-Pul",
+      "slug": "sar-e-pul-af22"
+    },
+    "code": {
+      "id": "AF22",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 7
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "35.714",
+      "lon": "66.139"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/sar-e-pul-af22/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF13",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "پکتیا",
+      "en": "Paktya",
+      "slug": "paktya-af13"
+    },
+    "code": {
+      "id": "AF13",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 11
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "33.632",
+      "lon": "69.388"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/paktya-af13/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF16",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "نورستان",
+      "en": "Nuristan",
+      "slug": "nuristan-af16"
+    },
+    "code": {
+      "id": "AF16",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 8
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "35.417",
+      "lon": "70.788"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/nuristan-af16/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF21",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "بلخ",
+      "en": "Balkh",
+      "slug": "balkh-af21"
+    },
+    "code": {
+      "id": "AF21",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 15
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "36.67",
+      "lon": "67.078"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/balkh-af21/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF08",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "پنجشیر",
+      "en": "Panjsher",
+      "slug": "panjsher-af08"
+    },
+    "code": {
+      "id": "AF08",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 7
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "35.446",
+      "lon": "69.795"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/panjsher-af08/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF28",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "جوزجان",
+      "en": "Jawzjan",
+      "slug": "jawzjan-af28"
+    },
+    "code": {
+      "id": "AF28",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 11
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "36.829",
+      "lon": "65.854"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/jawzjan-af28/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF27",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "کندهار",
+      "en": "Kandahar",
+      "slug": "kandahar-af27"
+    },
+    "code": {
+      "id": "AF27",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 16
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "31.045",
+      "lon": "65.71"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/kandahar-af27/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF24",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "دایکندی",
+      "en": "Daykundi",
+      "slug": "daykundi-af24"
+    },
+    "code": {
+      "id": "AF24",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 9
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "33.706",
+      "lon": "66.22"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/daykundi-af24/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF25",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "ارزگان",
+      "en": "Uruzgan",
+      "slug": "uruzgan-af25"
+    },
+    "code": {
+      "id": "AF25",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 7
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "32.854",
+      "lon": "66.059"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/uruzgan-af25/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF23",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "غور",
+      "en": "Ghor",
+      "slug": "ghor-af23"
+    },
+    "code": {
+      "id": "AF23",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 10
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "34.179",
+      "lon": "64.929"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/ghor-af23/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF33",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "فراه",
+      "en": "Farah",
+      "slug": "farah-af33"
+    },
+    "code": {
+      "id": "AF33",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 11
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "32.608",
+      "lon": "62.302"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/farah-af33/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF03",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "پروان",
+      "en": "Parwan",
+      "slug": "parwan-af03"
+    },
+    "code": {
+      "id": "AF03",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 10
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "34.958",
+      "lon": "68.886"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/parwan-af03/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF29",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "فاریاب",
+      "en": "Faryab",
+      "slug": "faryab-af29"
+    },
+    "code": {
+      "id": "AF29",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 14
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "36.06",
+      "lon": "64.869"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/faryab-af29/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF19",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "کندز",
+      "en": "Kunduz",
+      "slug": "kunduz-af19"
+    },
+    "code": {
+      "id": "AF19",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 7
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "36.843",
+      "lon": "68.746"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/kunduz-af19/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF14",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "خوست",
+      "en": "Khost",
+      "slug": "khost-af14"
+    },
+    "code": {
+      "id": "AF14",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 13
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "33.377",
+      "lon": "69.834"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/khost-af14/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF32",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "هرات",
+      "en": "Hirat",
+      "slug": "hirat-af32"
+    },
+    "code": {
+      "id": "AF32",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 16
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "34.197",
+      "lon": "62.131"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/hirat-af32/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF15",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "کنر ها",
+      "en": "Kunar",
+      "slug": "kunar-af15"
+    },
+    "code": {
+      "id": "AF15",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 15
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "34.966",
+      "lon": "71.094"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/kunar-af15/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF01",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "کابل",
+      "en": "Kabul",
+      "slug": "kabul-af01"
+    },
+    "code": {
+      "id": "AF01",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 15
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "34.555",
+      "lon": "69.335"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/kabul-af01/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF30",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "هلمند",
+      "en": "Hilmand",
+      "slug": "hilmand-af30"
+    },
+    "code": {
+      "id": "AF30",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 13
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "31.154",
+      "lon": "64.047"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/hilmand-af30/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF11",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "غزنی",
+      "en": "Ghazni",
+      "slug": "ghazni-af11"
+    },
+    "code": {
+      "id": "AF11",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 19
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "33.316",
+      "lon": "67.811"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/ghazni-af11/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF04",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "میدان وردک",
+      "en": "Maidan Wardak",
+      "slug": "maidan-wardak-af04"
+    },
+    "code": {
+      "id": "AF04",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 9
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "34.303",
+      "lon": "68.218"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/maidan-wardak-af04/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF02",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "کاپیسا",
+      "en": "Kapisa",
+      "slug": "kapisa-af02"
+    },
+    "code": {
+      "id": "AF02",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 7
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "34.963",
+      "lon": "69.623"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/kapisa-af02/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF06",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "ننگرهار",
+      "en": "Nangarhar",
+      "slug": "nangarhar-af06"
+    },
+    "code": {
+      "id": "AF06",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 22
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "34.274",
+      "lon": "70.476"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/nangarhar-af06/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF26",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "زابل",
+      "en": "Zabul",
+      "slug": "zabul-af26"
+    },
+    "code": {
+      "id": "AF26",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 11
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "32.2",
+      "lon": "67.148"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/zabul-af26/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF18",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "تخار",
+      "en": "Takhar",
+      "slug": "takhar-af18"
+    },
+    "code": {
+      "id": "AF18",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 17
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "36.702",
+      "lon": "69.779"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/takhar-af18/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF34",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "نیمروز",
+      "en": "Nimroz",
+      "slug": "nimroz-af34"
+    },
+    "code": {
+      "id": "AF34",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 5
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "30.802",
+      "lon": "62.319"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/nimroz-af34/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF07",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "لغمان",
+      "en": "Laghman",
+      "slug": "laghman-af07"
+    },
+    "code": {
+      "id": "AF07",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 5
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "34.764",
+      "lon": "70.16"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/laghman-af07/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF09",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "بغلان",
+      "en": "Baghlan",
+      "slug": "baghlan-af09"
+    },
+    "code": {
+      "id": "AF09",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 15
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "35.804",
+      "lon": "68.914"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/baghlan-af09/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF31",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "بادغیس",
+      "en": "Badghis",
+      "slug": "badghis-af31"
+    },
+    "code": {
+      "id": "AF31",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 7
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "35.137",
+      "lon": "63.734"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/badghis-af31/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  },
+  {
+    "id": "AF10",
+    "level": 1,
+    "level_name": {
+      "local": "ولایت",
+      "en": "Province"
+    },
+    "name": {
+      "local": "بامیان",
+      "en": "Bamyan",
+      "slug": "bamyan-af10"
+    },
+    "code": {
+      "id": "AF10",
+      "iso": null
+    },
+    "parent": null,
+    "ancestors": [],
+    "children_count": {
+      "district": 7
+    },
+    "zip_codes": [],
+    "geo": {
+      "lat": "34.804",
+      "lon": "67.234"
+    },
+    "metadata": {},
+    "source": {
+      "name": "Open Admin Data",
+      "url": "https://openadmindata.org/af/provinces/bamyan-af10/",
+      "api": "https://openadmindata.org/api/af/"
+    }
+  }
+]

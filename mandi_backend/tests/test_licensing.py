@@ -67,7 +67,7 @@ class LicensingTests(TestCase):
         record = {"application_id": "APP-1", "name": "Business", "address": {"province": None}}
         get.return_value = self.response({"results": [record], "count": 21, "next": "http://licensing.test/next"})
         result = source_search(actor, "licensing", "importer", page=1)
-        self.assertFalse(result["is_demo"])
+        self.assertEqual(result["count"], 21)
         self.assertTrue(result["has_next"])
         self.assertEqual(result["results"][0]["id"], "company:APP-1")
         get.return_value = self.response(record)
@@ -99,3 +99,37 @@ class LicensingDetailProjectionTests(SimpleTestCase):
         from apps.integrations.licensing import application_details
         result = application_details("pharmacy", {"application_id": "P-1", "address": None, "applicant": None})
         self.assertEqual(len(result["sections"]), 1)
+
+    def test_profile_includes_form_relevant_identity_license_and_premises(self):
+        from apps.integrations.licensing import application_details
+        result = application_details("factory", {
+            "application_id": "F-1",
+            "name": "فابریکه",
+            "name_en": "Factory",
+            "application_step": "license_issuance",
+            "register_type": "new",
+            "service_status": "active",
+            "old_license_number": "OLD-1",
+            "old_license_issue_date": "2020-01-01",
+            "company_branches": [{"name_en": "Branch"}],
+            "warehouses": [{"name_en": "Store"}],
+            "address": {"province": {"name_en": "Kabul"}, "total_area": "500"},
+        })
+        fields = {
+            field["label"]: field["value"]
+            for section in result["sections"]
+            for field in section["fields"]
+        }
+        for label in (
+            "English name",
+            "Application step",
+            "Register type",
+            "Service status",
+            "Old license number",
+            "Old license issue date",
+            "Branches",
+            "Warehouses",
+        ):
+            self.assertIn(label, fields)
+        self.assertEqual(fields["Area"], "500")
+        self.assertNotIn("Inspection date", fields)

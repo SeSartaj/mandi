@@ -16,9 +16,7 @@ class RemoteSubmission:
     submission_id: str
     establishment_id: str
     submitted_at: datetime | None
-    inspector_id: str | None
-    inspected_on: str
-    inspection_kind: str
+    form_version: str
     data: dict
 
 

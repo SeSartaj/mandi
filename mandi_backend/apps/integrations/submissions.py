@@ -1,5 +1,5 @@
 import mimetypes
-"""Helpers that turn raw KoBo submissions into displayable inspection data."""
+"""Helpers that turn raw collection submissions into displayable inspection data."""
 
 import re
 
@@ -62,9 +62,9 @@ _REPEAT_INDEX = re.compile(r"\[\d+\]")
 
 
 def leaf_name(path):
-    """Collapse grouped and repeated KoBo paths to the bare question name.
+    """Collapse grouped and repeated submission paths to the bare question name.
 
-    KoBo stores answers inside their group and repeat, for example
+    Collection forms store answers inside their group or repeat, for example
     ``sec2/q2_1`` or ``samples[2]/sample_trade_name``; the XLSForm name is
     ``q2_1`` / ``sample_trade_name``.
     """
@@ -75,7 +75,7 @@ def normalize(data):
     """Return the submission keyed by question name, in form order."""
     normalized = {}
     for key, value in (data or {}).items():
-        # ``meta/`` and ``formhub/`` hold KoBo bookkeeping, never answers.
+        # ``meta/`` and ``formhub/`` hold device bookkeeping, never answers.
         if str(key).startswith(("meta/", "formhub/")):
             continue
         name = leaf_name(key)
@@ -85,7 +85,7 @@ def normalize(data):
 
 
 def first_label(value):
-    """KoBo stores labels as one entry per translation; take the default one."""
+    """Collection forms store labels as one entry per translation; take the default one."""
     if isinstance(value, list):
         for item in value:
             if item:
@@ -99,7 +99,7 @@ def form_schema(asset):
 
     Returns ``labels`` (question name to label), ``choices`` (question name to
     ``{choice value: label}``), ``types`` (question name to XLSForm type),
-    ``paths`` (question name to KoBo path) and ``groups`` (group name to label).
+    ``paths`` (question name to submission path) and ``groups`` (group name to label).
     """
     content = (asset or {}).get("content") or {}
     survey = content.get("survey") or []
@@ -138,7 +138,7 @@ def form_schema(asset):
         if path:
             paths[name] = str(path).split(" ")[0]
 
-        # KoBo stores deployed selects as ``type: select_one`` plus
+        # Deployed selects use ``type: select_one`` plus
         # ``select_from_list_name``; XLSForms use ``select_one <list>``.
         list_name = node.get("select_from_list_name") or ""
         if not list_name:
@@ -159,7 +159,7 @@ def form_schema(asset):
 
 
 def group_name(path):
-    """Return the parent group/repeat name for a KoBo question path."""
+    """Return the parent group/repeat name for a submission question path."""
     parts = [part for part in str(path or "").split("/") if part]
     return _REPEAT_INDEX.sub("", parts[-2]) if len(parts) > 1 else ""
 
@@ -243,7 +243,7 @@ def _leading_number(value):
 
 
 def _section_rank(suffix, data):
-    """Sort key for a section, since KoBo returns JSON keys unordered."""
+    """Sort key for a section, since submission JSON keys are unordered."""
     explicit = _as_float(data.get(f"order_{suffix}"))
     if explicit is not None:
         return explicit
@@ -368,6 +368,9 @@ def submission_answers(data, schema):
 
 def _is_internal(name):
     if name in META_KEYS or name in COMPUTED_KEYS or name.startswith("meta/"):
+        return True
+    # Establishment details injected into the deployed form are prompts, not answers.
+    if name.startswith("mandi_est_"):
         return True
     return name.startswith(SECTION_SCORE_PREFIXES)
 

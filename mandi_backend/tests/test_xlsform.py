@@ -55,7 +55,7 @@ class AddEstablishmentQuestionTests(SimpleTestCase):
         self.assertEqual(first["label::Dari (fa)"], "تأسیسات")
         self.assertIsNone(first["label::English (en)"])
 
-    def test_existing_establishment_question_is_not_duplicated(self):
+    def test_existing_establishment_question_gets_detail_rows_without_duplication(self):
         content = make_workbook(
             ["type", "name", "label"],
             [
@@ -66,9 +66,31 @@ class AddEstablishmentQuestionTests(SimpleTestCase):
 
         updated, _ = add_establishment_question("form.xlsx", content)
 
-        names = [row["name"] for row in read_survey(updated)]
+        rows = read_survey(updated)
+        names = [row["name"] for row in rows]
         self.assertEqual(names.count("establishment_id"), 1)
-        self.assertEqual(updated, content)
+        self.assertIn("mandi_est_province", names)
+        self.assertIn("mandi_est_owner", names)
+        self.assertNotEqual(updated, content)
+
+    def test_detail_rows_use_pulldata_and_hide_empty_values(self):
+        content = make_workbook(
+            ["type", "name", "label"],
+            [["text", "respondent_name", "Respondent name"]],
+        )
+
+        updated, _ = add_establishment_question("form.xlsx", content)
+        rows = {row["name"]: row for row in read_survey(updated)}
+
+        self.assertEqual(rows["mandi_est_details"]["type"], "begin_group")
+        self.assertEqual(rows["mandi_est_details"]["appearance"], "field-list")
+        calculate = rows["mandi_est_license_number"]
+        self.assertEqual(calculate["type"], "calculate")
+        self.assertIn("pulldata('establishments', 'license_number', 'name'", calculate["calculation"])
+        note = rows["mandi_est_license_number_note"]
+        self.assertEqual(note["type"], "note")
+        self.assertIn("${mandi_est_license_number}", note["label"])
+        self.assertIn("string-length(${mandi_est_license_number}) > 0", note["relevant"])
 
     def test_missing_survey_sheet_is_rejected(self):
         content = make_workbook(["type", "name", "label"], [], sheet_name="Sheet1")
@@ -95,10 +117,10 @@ class ChecklistMetadataTests(SimpleTestCase):
         self.assertEqual(self.metadata([
             ["form_title", "form_id", "version", "establishment_kind"],
             ["بازرسی", "inspection", 20261110, "importer"],
-        ]), {"name": "بازرسی", "code": "inspection", "version": "20261110", "establishment_kind": "importer"})
+        ]), {"name": "بازرسی", "code": "inspection", "establishment_kind": "importer"})
 
     def test_missing_settings_uses_filename_without_guessing_type_or_version(self):
-        self.assertEqual(self.metadata(), {"name": "Checklist", "code": "", "version": ""})
+        self.assertEqual(self.metadata(), {"name": "Checklist", "code": ""})
 
     def test_empty_settings_and_invalid_kind(self):
         self.assertEqual(self.metadata([])["name"], "Checklist")
@@ -164,28 +186,3 @@ class DeploymentTitleTests(SimpleTestCase):
         original = make_workbook(["type", "name", "label"], [["text", "name", "Name"]])
         workbook = load_workbook(BytesIO(set_form_title(original, "Saved title")))
         self.assertEqual(list(workbook["settings"].values), [("form_title",), ("Saved title",)])
-
-    def test_new_and_existing_deployments_use_saved_name_in_every_upload(self):
-        from types import SimpleNamespace
-        from unittest.mock import patch
-        from apps.integrations.kobo import deploy_checklist_to_kobo
-
-        original = make_workbook(["type", "name", "label"], [["text", "name", "Name"]])
-        for existing in (False, True):
-            with self.subTest(existing=existing):
-                checklist = SimpleNamespace(
-                    name="User chosen title", kobo_asset_uid="asset" if existing else "",
-                    xlsform=SimpleNamespace(name="template.xlsx", open=lambda mode: BytesIO(original)),
-                )
-                asset = {"uid": "asset", "version_id": "v1"}
-                with patch("apps.integrations.kobo.get_asset", return_value=asset), \
-                     patch("apps.integrations.kobo.import_xlsform", return_value="asset") as importer, \
-                     patch("apps.integrations.kobo._request") as request, \
-                     patch("apps.integrations.kobo.deploy_asset", return_value={"deployment_status": "deployed"}):
-                    deploy_checklist_to_kobo(checklist)
-                    self.assertEqual(importer.call_count, 1 if existing else 2)
-                    for call in importer.call_args_list:
-                        workbook = load_workbook(BytesIO(call.args[0].getvalue()))
-                        self.assertEqual(workbook["settings"]["A2"].value, checklist.name)
-                        self.assertEqual(call.args[2], checklist.name)
-                    request.assert_called_once_with("PATCH", "/api/v2/assets/asset/", json={"name": checklist.name})

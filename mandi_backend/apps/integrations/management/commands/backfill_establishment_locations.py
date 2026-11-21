@@ -18,7 +18,7 @@ class Command(BaseCommand):
             raise CommandError("This registry does not support listing establishments.")
         updated = 0
         for kind, category in KIND_CATEGORIES.items():
-            links = dict(SourceLink.objects.filter(source=source, is_primary=True, is_demo=False,
+            links = dict(SourceLink.objects.filter(source=source, is_primary=True,
                 establishment__kind=kind).values_list("external_id", "establishment_id"))
             if not links:
                 continue

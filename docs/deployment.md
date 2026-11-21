@@ -198,11 +198,9 @@ To add another XLSForm service, implement/register an adapter in `COLLECTION_ADA
 configuration, and map its submission metadata to the normalized inspection
 contract. Core establishments, users, approvals, and reports do not change.
 
-The existing KoBo paths remain available for the development setup. Setting
-`COLLECTION_PROVIDER=kobo` selects that integration; production defaults to ODK.
-It is an adapter choice, not automatic migration between providers. Retained
-KoBo-specific API aliases/response keys exist for compatibility with older
-clients; new UI actions use provider-neutral collection endpoints.
+Provider selection is an adapter choice, not automatic migration between
+providers. Core establishments, users, approvals, and reports do not change when
+another XLSForm service is added.
 
 ## Backups and recovery
 

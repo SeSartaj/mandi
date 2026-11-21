@@ -1,6 +1,6 @@
 import { CreateButton, EditButton, CancelButton } from "@/components/public/ActionButton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, FileSpreadsheet, Rocket } from "lucide-react";
+import { Download, ExternalLink, FileSpreadsheet, FolderKanban, Rocket } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
@@ -16,10 +16,17 @@ import { DeploymentBadge } from "./DeploymentBadge";
 import { Button } from "@/components/ui/button";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import ChecklistForm from "@/features/checklists/ChecklistForm";
+import OdkProjectsDialog from "@/features/checklists/OdkProjectsDialog";
 import { useApiQuery } from "@/features/shared/api";
 import { choiceLabel } from "@/features/shared/labels";
-import type { Checklist } from "@/lib/api";
+import type { Checklist, OdkProject } from "@/lib/api";
 import { api, errorMessage } from "@/lib/api";
+
+function structureConflict(error: unknown) {
+  return (
+    (error as { response?: { status?: number } } | null)?.response?.status === 409
+  );
+}
 
 export default function ChecklistsPage() {
   const { t } = useTranslation();
@@ -27,9 +34,21 @@ export default function ChecklistsPage() {
   const [open, setOpen] = useState(false);
   const [deploying, setDeploying] = useState<Checklist | null>(null);
   const [editing, setEditing] = useState<Checklist | null>(null);
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [deployProject, setDeployProject] = useState<number | "">("");
   const checklists = useApiQuery<Checklist[]>(["checklists"], "/checklists/");
+  const projects = useApiQuery<OdkProject[]>(
+    ["odk-projects"],
+    "/odk/projects/",
+    {},
+    { enabled: Boolean(deploying) },
+  );
   const deploy = useMutation({
-    mutationFn: (checklist: Checklist) => api.post(`/checklists/${checklist.id}/deploy/`),
+    mutationFn: ({ checklist, force }: { checklist: Checklist; force?: boolean }) =>
+      api.post(`/checklists/${checklist.id}/deploy/`, {
+        ...(deployProject ? { project_id: deployProject } : {}),
+        ...(force ? { force: true } : {}),
+      }),
     onSuccess: () => setDeploying(null),
     onSettled: () => {
       client.invalidateQueries({ queryKey: ["checklists"] });
@@ -73,14 +92,14 @@ export default function ChecklistsPage() {
   };
 
   const rows = checklists.data ?? [];
-  const deployingId = deploy.isPending && deploy.variables ? deploy.variables.id : null;
+  const deployingId = deploy.isPending && deploy.variables ? deploy.variables.checklist.id : null;
 
   return (
     <div className="space-y-6">
       <PageSection
         headingLevel={1}
         title={t("Checklists")}
-        description={t("Upload and manage the XLSForms used for inspections.")}
+        description={t("Upload and manage the XLSForms used to collect submissions.")}
         actions={
           <div className="inline-actions">
             <Can permission="establishments.view_establishment">
@@ -91,6 +110,12 @@ export default function ChecklistsPage() {
               >
                 <Download />
                 {t("Download establishments CSV")}
+              </Button>
+            </Can>
+            <Can permission="inspections.deploy_checklist">
+              <Button variant="outline" onClick={() => setProjectsOpen(true)}>
+                <FolderKanban />
+                {t("ODK projects")}
               </Button>
             </Can>
             <Can permission="inspections.add_checklist">
@@ -119,12 +144,11 @@ export default function ChecklistsPage() {
             onRetry={() => checklists.refetch()}
           />
         ) : (
-          <AppTable className="min-w-[980px]">
+          <AppTable className="min-w-[900px]">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("Name")}</TableHead>
                 <TableHead>{t("Checklist code")}</TableHead>
-                <TableHead>{t("Version")}</TableHead>
                 <TableHead>{t("Type")}</TableHead>
                 <TableHead>{t("XLSForm")}</TableHead>
                 <TableHead>{t("Deployment")}</TableHead>
@@ -140,7 +164,6 @@ export default function ChecklistsPage() {
                     </Link>
                   </TableCell>
                   <TableCell>{checklist.code}</TableCell>
-                  <TableCell>{checklist.version}</TableCell>
                   <TableCell>{t(choiceLabel(checklist.establishment_kind))}</TableCell>
                   <TableCell>
                     {checklist.xlsform ? (
@@ -209,6 +232,7 @@ export default function ChecklistsPage() {
                           }
                           onClick={() => {
                             deploy.reset();
+                            setDeployProject(checklist.collection.project_id ?? "");
                             setDeploying(checklist);
                           }}
                         >
@@ -257,7 +281,7 @@ export default function ChecklistsPage() {
             <Button
               disabled={deploy.isPending}
               onClick={() => {
-                if (deploying) deploy.mutate(deploying);
+                if (deploying) deploy.mutate({ checklist: deploying });
               }}
             >
               {deploy.isPending ? t("Deploying…") : t("Deploy")}
@@ -266,11 +290,52 @@ export default function ChecklistsPage() {
         }
       >
         <p className="font-medium">
-          {deploying?.name} · {deploying?.version}
+          {deploying?.name}
         </p>
+        <label className="mt-4 block space-y-1 text-sm">
+          <span className="font-medium">{t("ODK project")}</span>
+          <select
+            className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+            value={deployProject}
+            onChange={(event) =>
+              setDeployProject(event.target.value ? Number(event.target.value) : "")
+            }
+            disabled={deploy.isPending}
+          >
+            <option value="">{t("Default project")}</option>
+            {(projects.data ?? [])
+              .filter((project) => !project.archived)
+              .map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        {projects.error ? (
+          <p className="muted text-sm">{errorMessage(projects.error)}</p>
+        ) : null}
         {deploy.error && (
-          <div role="alert" className="error-box">
-            {errorMessage(deploy.error)}
+          <div role="alert" className="error-box space-y-3">
+            <p>{errorMessage(deploy.error)}</p>
+            {structureConflict(deploy.error) ? (
+              <>
+                <p className="text-sm">
+                  {t(
+                    "Publishing anyway can make earlier submissions unreadable. Continue only if you accept that risk.",
+                  )}
+                </p>
+                <Button
+                  variant="destructive"
+                  disabled={deploy.isPending}
+                  onClick={() => {
+                    if (deploying) deploy.mutate({ checklist: deploying, force: true });
+                  }}
+                >
+                  {deploy.isPending ? t("Publishing…") : t("Publish anyway")}
+                </Button>
+              </>
+            ) : null}
           </div>
         )}
       </AppDialog>
@@ -286,6 +351,8 @@ export default function ChecklistsPage() {
       >
         <ChecklistForm existing={editing ?? undefined} onClose={close} />
       </AppDialog>
+
+      <OdkProjectsDialog open={projectsOpen} onOpenChange={setProjectsOpen} />
     </div>
   );
 }

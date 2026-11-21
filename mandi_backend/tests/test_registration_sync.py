@@ -26,15 +26,14 @@ class RegistrationSyncTests(TestCase):
     def test_auto_create_then_update_without_duplicates(self):
         self.assertEqual(sync_batch(self.actor)["created"], 1)
         obj = Establishment.objects.get()
-        self.assertEqual(obj.kind, "pharmacy")
+        self.assertEqual(obj.kind_id, "pharmacy")
         self.assertEqual(obj.primary_source, "registration")
-        self.assertEqual(obj.status, "completed")
         self.record["name"] = "Updated pharmacy"
         self.record["details"]["province"] = "Herat"
         self.assertEqual(sync_batch(self.actor)["updated"], 1)
         obj.refresh_from_db()
         self.assertEqual(obj.name, "Updated pharmacy")
-        self.assertEqual(obj.province, "Herat")
+        self.assertEqual(obj.province.name, "Herat")
         self.assertEqual(Establishment.objects.count(), 1)
         self.assertEqual(sync_batch(self.actor)["unchanged"], 1)
 

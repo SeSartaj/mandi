@@ -5,7 +5,7 @@ from django.contrib.auth.models import Permission
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from apps.establishments.models import Establishment, SourceLink
+from apps.establishments.models import Establishment, EstablishmentType, SourceLink
 
 
 @override_settings(LICENSING_BASE_URL="http://licensing.test", LICENSING_REGISTRATION_API_KEY="test-key")
@@ -13,7 +13,9 @@ class SourceDetailTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="source-reader")
         self.user.user_permissions.set(Permission.objects.filter(codename__in=["view_establishment", "view_sourcelink"]))
-        self.establishment = Establishment.objects.create(name="Local", kind="factory", province="Kabul")
+        self.establishment = Establishment.objects.create(
+            name="Local", kind=EstablishmentType.objects.get(pk="factory")
+        )
         SourceLink.objects.create(establishment=self.establishment, source="licensing", external_id="factory:F-1", linked_by=self.user)
         self.client = APIClient()
         self.client.force_authenticate(self.user)

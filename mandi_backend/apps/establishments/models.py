@@ -3,7 +3,7 @@ import uuid
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.conf import settings
 from django.db import models
-from apps.core.models import BaseModel
+from apps.core.models import BaseModel, District, Province
 
 
 class EstablishmentType(models.Model):
@@ -40,17 +40,18 @@ class Establishment(BaseModel):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=250)
-    kind = models.CharField(max_length=20)
-    subtype = models.CharField(max_length=100, blank=True)
-    province = models.CharField(max_length=100, blank=True)
-    district = models.CharField(max_length=100, blank=True)
+    kind = models.ForeignKey(
+        EstablishmentType, on_delete=models.PROTECT, related_name="establishments"
+    )
+    province = models.ForeignKey(
+        Province, null=True, blank=True, on_delete=models.PROTECT, related_name="establishments"
+    )
+    district = models.ForeignKey(
+        District, null=True, blank=True, on_delete=models.PROTECT, related_name="establishments"
+    )
     address = models.TextField(blank=True)
     latitude = models.FloatField(null=True, blank=True, validators=[MinValueValidator(-90), MaxValueValidator(90)])
     longitude = models.FloatField(null=True, blank=True, validators=[MinValueValidator(-180), MaxValueValidator(180)])
-    phone = models.CharField(max_length=100, blank=True)
-    attributes = models.JSONField(default=dict, blank=True)
-    license_number = models.CharField(max_length=200, blank=True)
-    status = models.CharField(max_length=100, blank=True)
 
     def clean(self):
         from django.core.exceptions import ValidationError
@@ -59,13 +60,15 @@ class Establishment(BaseModel):
             raise ValidationError("Provide both latitude and longitude.")
         if any(value is not None and not math.isfinite(value) for value in (self.latitude, self.longitude)):
             raise ValidationError("Coordinates must be finite numbers.")
-        if not EstablishmentType.objects.filter(code=self.kind, is_active=True).exists():
+        if self.kind_id and not EstablishmentType.objects.filter(
+            pk=self.kind_id, is_active=True
+        ).exists():
             raise ValidationError({"kind": "Select an active establishment type."})
-        if not isinstance(self.attributes, dict):
-            raise ValidationError({"attributes": "Attributes must be a JSON object."})
+        if self.district and self.province and self.district.province_id != self.province_id:
+            raise ValidationError({"district": "District must belong to the selected province."})
 
     def get_kind_display(self):
-        return str(EstablishmentType.objects.filter(pk=self.kind).first() or self.kind)
+        return str(self.kind) if self.kind_id else ""
 
     @property
     def primary_source(self):
@@ -89,7 +92,6 @@ class SourceLink(models.Model):
     source = models.CharField(max_length=20)
     external_id = models.CharField(max_length=200)
     details = models.JSONField(default=dict)
-    is_demo = models.BooleanField(default=False)
     is_primary = models.BooleanField(default=False)
     derived_from = models.CharField(max_length=20, blank=True, db_default="")
     last_synced_at = models.DateTimeField(null=True, blank=True)

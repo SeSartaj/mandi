@@ -60,7 +60,7 @@ class EstablishmentMapTests(TestCase):
         self.assertEqual(self.client.patch(url, {"latitude": 91}, format="json").status_code, 400)
         self.assertEqual(self.client.patch(url, {"latitude": None}, format="json").status_code, 400)
 
-    @override_settings(DEMO_INTEGRATIONS=False, LICENSING_BASE_URL="", REGISTRATION_BASE_URL="http://registry.test", REGISTRATION_API_KEY="key")
+    @override_settings(LICENSING_BASE_URL="", REGISTRATION_BASE_URL="http://registry.test", REGISTRATION_API_KEY="key")
     @patch("apps.integrations.registry.RegistrationAdapter.list_page")
     def test_backfill_existing_registry_records_without_opening_profiles(self, list_page):
         raw = {"application_id": "existing", "name": "Existing", "address": {"latitude": "34.5", "longitude": "69.2"}}

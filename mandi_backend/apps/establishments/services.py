@@ -1,5 +1,6 @@
 import csv
 import io
+import uuid
 
 from django.db import transaction, IntegrityError
 from django.core.exceptions import ValidationError as ModelValidationError
@@ -9,7 +10,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.accounts.services import require
 
-from .models import Establishment, SourceLink
+from .models import Establishment, EstablishmentType, SourceLink
 from apps.integrations.registry import canonical_source
 
 
@@ -21,9 +22,16 @@ def list_establishments(actor, filters):
             Q(name__icontains=filters["search"])
             | Q(address__icontains=filters["search"])
         )
-    for field in ("kind", "province", "district"):
-        if filters.get(field):
-            qs = qs.filter(**{field: filters[field]})
+    if filters.get("kind"):
+        qs = qs.filter(kind_id=filters["kind"])
+    for field in ("province", "district"):
+        value = filters.get(field)
+        if not value:
+            continue
+        try:
+            qs = qs.filter(**{f"{field}_id": uuid.UUID(str(value))})
+        except (ValueError, TypeError):
+            qs = qs.filter(**{f"{field}__name__iexact": value})
     return qs
 
 
@@ -33,6 +41,65 @@ def get_establishment(actor, pk):
         return Establishment.objects.prefetch_related("source_links").get(pk=pk)
     except Establishment.DoesNotExist as exc:
         raise NotFound("Establishment not found.") from exc
+
+
+def list_establishment_types(actor):
+    require(actor, "establishments.view_establishment")
+    return EstablishmentType.objects.order_by("name")
+
+
+@transaction.atomic
+def save_establishment_type(actor, data, code=None):
+    require(actor, "establishments.change_establishment")
+    if code:
+        try:
+            obj = EstablishmentType.objects.select_for_update().get(pk=code)
+        except EstablishmentType.DoesNotExist as exc:
+            raise NotFound("Establishment type not found.") from exc
+        for field in ("name", "is_active"):
+            if field in data:
+                setattr(obj, field, data[field])
+    else:
+        obj = EstablishmentType(
+            code=data["code"],
+            name=data["name"],
+            is_active=data.get("is_active", True),
+        )
+    obj.full_clean()
+    obj.save()
+    return obj
+
+
+def _location_value(value, province=None):
+    """Accept a model instance, an ID-free name, or empty; resolve names to core models."""
+    from apps.core.models import Country, District, Province
+
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        return value
+    country, _ = Country.objects.get_or_create(
+        code="AF", defaults={"name": "Afghanistan"}
+    )
+    if province is None:
+        return Province.objects.get_or_create(
+            country=country, name=value, defaults={"code": ""}
+        )[0]
+    return District.objects.get_or_create(
+        province=province, name=value, defaults={"code": ""}
+    )[0]
+
+
+def _type_value(value):
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        return value
+    return EstablishmentType.objects.filter(pk=value).first()
+
+
+def _type_id(value):
+    return getattr(value, "pk", value)
 
 
 @transaction.atomic
@@ -50,16 +117,26 @@ def save_establishment(actor, data, pk=None):
             raise ValidationError("Identity is managed by the primary registry. Refresh it from that source.")
     if (
         pk
-        and data.get("kind", obj.kind) != obj.kind
-        and (obj.inspections.exists() or obj.source_links.exists())
+        and _type_id(data.get("kind", obj.kind)) != obj.kind_id
+        and (obj.collection_submissions.exists() or obj.source_links.exists())
     ):
         raise ValidationError(
             {
-                "kind": "An establishment with inspections or source links cannot change category."
+                "kind": "An establishment with submissions or source links cannot change category."
             }
         )
-    for key, value in data.items():
-        setattr(obj, key, value)
+    values = dict(data)
+    values["kind"] = _type_value(values.get("kind", getattr(obj, "kind", None)))
+    values["province"] = _location_value(
+        values.get("province", getattr(obj, "province", None))
+    )
+    values["district"] = _location_value(
+        values.get("district", getattr(obj, "district", None)), values["province"]
+    )
+    field_names = {field.name for field in Establishment._meta.fields}
+    for key, value in values.items():
+        if key in field_names:
+            setattr(obj, key, value)
     if not pk:
         obj.created_by = actor
     obj.updated_by = actor
@@ -89,9 +166,8 @@ def connect_source(actor, pk, source, external_id):
                 source=source,
                 defaults={
                     "external_id": external_id,
-                    "details": record["details"] if record["is_demo"] else {"name": record["name"]},
+                    "details": {"name": record["name"]},
                     "last_synced_at": timezone.now(),
-                    "is_demo": record["is_demo"],
                     "linked_by": actor,
                 },
             )
@@ -116,48 +192,104 @@ def disconnect_source(actor, pk, source):
 
 
 def establishment_choice_csv(limit=None, kind=None):
-    """CSV consumed by an XLSForm select_one_from_file establishments.csv."""
+    """CSV consumed by an XLSForm select_one_from_file establishments.csv.
+
+    Includes the Licensing fields the collector needs after selecting an
+    establishment. Only the stored business/contact projection is exported.
+    """
     qs = Establishment.objects.order_by("-updated_at")
     if kind:
-        qs = qs.filter(kind=kind)
+        qs = qs.filter(kind_id=_type_id(kind))
     if limit:
         qs = qs[:limit]
+    rows = list(qs)
+    from .models import EstablishmentType, SourceLink
+
+    labels = dict(EstablishmentType.objects.values_list("code", "name"))
+    licensing = dict(
+        SourceLink.objects.filter(
+            source="licensing", establishment_id__in=[row.pk for row in rows]
+        ).values_list("establishment_id", "details")
+    )
+    columns = [
+        "name",
+        "label",
+        "kind",
+        "province",
+        "district",
+        "address",
+        "license_number",
+        "license_issue_date",
+        "license_expiry_date",
+        "grade",
+        "owner",
+        "owner_phone",
+        "owner_email",
+        "technical_manager",
+        "technical_manager_phone",
+        "technical_staff_count",
+        "activities",
+    ]
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["name", "label", "kind", "province", "district"])
-    from .models import EstablishmentType
-    labels = dict(EstablishmentType.objects.values_list("code", "name"))
-    for establishment in qs.iterator():
+    writer.writerow(columns)
+    for establishment in rows:
+        details = licensing.get(establishment.pk) or {}
+        source = [details.get(column, "") for column in columns[5:]]
         writer.writerow(
             [
                 str(establishment.pk),
-                f"{establishment.name} — {establishment.province} — {labels.get(establishment.kind, establishment.kind)}",
-                establishment.kind,
-                establishment.province,
-                establishment.district,
+                f"{establishment.name} — {establishment.province.name if establishment.province else ''} — {labels.get(establishment.kind_id, establishment.kind_id)}",
+                establishment.kind_id,
+                establishment.province.name if establishment.province else "",
+                establishment.district.name if establishment.district else "",
+                *source,
             ]
         )
     return buffer.getvalue().encode("utf-8")
 
 
-IDENTITY_FIELDS = ("name", "province", "district", "address", "phone", "subtype", "license_number", "status")
-
-
 def identity_snapshot(establishment):
     """Identity known at ingestion, not a claim about an offline visit's time."""
     return {
-        "id": str(establishment.pk), "kind": establishment.kind,
-        **{key: getattr(establishment, key) for key in IDENTITY_FIELDS},
-        "attributes": establishment.attributes,
+        "id": str(establishment.pk),
+        "kind": establishment.kind_id,
+        "name": establishment.name,
+        "province": establishment.province.name if establishment.province else "",
+        "district": establishment.district.name if establishment.district else "",
+        "address": establishment.address,
+        "latitude": establishment.latitude,
+        "longitude": establishment.longitude,
         "captured_at": timezone.now().isoformat(),
         "sources": list(establishment.source_links.values("source", "external_id", "is_primary")),
     }
 
 
-
 def _source_map_details(establishment, record):
     details = {"name": establishment.name}
-    location = record.get("details", {}).get("location")
+    source_details = record.get("details", {})
+    for key in (
+        "province",
+        "district",
+        "address",
+        "license_number",
+        "license_issue_date",
+        "license_expiry_date",
+        "grade",
+        "pharmacy_type",
+        "owner",
+        "owner_phone",
+        "owner_email",
+        "technical_manager",
+        "technical_manager_phone",
+        "technical_staff_count",
+        "activities",
+        "status",
+    ):
+        value = source_details.get(key)
+        if value is not None and value != "":
+            details[key] = value
+    location = source_details.get("location")
     if location:
         details["location"] = location
     return details
@@ -165,14 +297,45 @@ def _source_map_details(establishment, record):
 
 def _identity(record):
     details = record.get("details", {})
-    result = {key: str(details.get(key) or "") for key in IDENTITY_FIELDS}
     location = details.get("location") or {}
-    result["latitude"] = location.get("latitude")
-    result["longitude"] = location.get("longitude")
-    result["name"] = str(record.get("name") or result.get("name", ""))
+    result = {
+        "name": str(record.get("name") or details.get("name") or ""),
+        "province": str(details.get("province") or ""),
+        "district": str(details.get("district") or ""),
+        "address": str(details.get("address") or ""),
+        "latitude": location.get("latitude"),
+        "longitude": location.get("longitude"),
+    }
     if not result["name"]:
         raise ValidationError("The registry must provide a name before import.")
     return result
+
+
+def _resolve_identity(identity):
+    """Map registry province/district names onto the core models."""
+    resolved = dict(identity)
+    province = _location_value(identity.get("province"))
+    resolved["province"] = province
+    resolved["district"] = (
+        _location_value(identity.get("district"), province) if province else None
+    )
+    return resolved
+
+
+def _identity_matches(obj, identity):
+    return (
+        obj.name == identity["name"]
+        and obj.address == identity["address"]
+        and obj.latitude == identity["latitude"]
+        and obj.longitude == identity["longitude"]
+        and (obj.province.name if obj.province else "") == identity["province"]
+        and (obj.district.name if obj.district else "") == identity["district"]
+    )
+
+
+def _apply_identity(obj, identity):
+    for key, value in _resolve_identity(identity).items():
+        setattr(obj, key, value)
 
 
 @transaction.atomic
@@ -188,15 +351,15 @@ def import_establishment(actor, source, external_id, kind):
         raise ValidationError({"kind": "Select an active establishment type."})
     existing = SourceLink.objects.select_related("establishment").filter(source=source, external_id=external_id).first()
     if existing:
-        if existing.establishment.kind != kind:
+        if existing.establishment.kind_id != kind:
             raise ValidationError("This external record already belongs to a different establishment type.")
         return existing.establishment
     record = source_record(actor, source, external_id, kind)
-    obj = save_establishment(actor, dict(_identity(record), kind=kind))
+    obj = save_establishment(actor, dict(_resolve_identity(_identity(record)), kind=kind))
     try:
         with transaction.atomic():
             SourceLink.objects.create(establishment=obj, source=source, external_id=external_id,
-                details=_source_map_details(obj, record), is_demo=record["is_demo"], is_primary=True,
+                details=_source_map_details(obj, record), is_primary=True,
                 linked_by=actor, last_synced_at=timezone.now())
     except IntegrityError as exc:
         raise ValidationError("This external record was imported concurrently; retry the import.") from exc
@@ -213,9 +376,8 @@ def refresh_identity(actor, pk):
     link = obj.source_links.filter(is_primary=True).first()
     if not link:
         raise ValidationError("This establishment is managed by Mandi.")
-    record = source_record(actor, link.source, link.external_id, obj.kind)
-    for key, value in _identity(record).items():
-        setattr(obj, key, value)
+    record = source_record(actor, link.source, link.external_id, obj.kind_id)
+    _apply_identity(obj, _identity(record))
     obj.updated_by = actor
     try:
         obj.full_clean()
@@ -261,19 +423,18 @@ def sync_registry_record(actor, source, kind, record):
     if link:
         obj = Establishment.objects.select_for_update().get(pk=link.establishment_id)
         link.refresh_from_db()
-        if obj.kind != kind:
+        if obj.kind_id != kind:
             raise ValidationError("The external record is mapped to another establishment type.")
         if not link.is_primary:
             return "skipped"
         sync_related_mappings(actor, obj, source, record)
         identity = _identity(record)
-        if all(getattr(obj, key) == value for key, value in identity.items()):
+        if _identity_matches(obj, identity):
             link.details = _source_map_details(obj, record)
             link.last_synced_at = timezone.now()
             link.save(update_fields=["details", "last_synced_at"])
             return "unchanged"
-        for key, value in identity.items():
-            setattr(obj, key, value)
+        _apply_identity(obj, identity)
         obj.updated_by = actor
         try:
             obj.full_clean()
@@ -284,11 +445,11 @@ def sync_registry_record(actor, source, kind, record):
         link.last_synced_at = timezone.now()
         link.save(update_fields=["details", "last_synced_at"])
         return "updated"
-    obj = save_establishment(actor, dict(_identity(record), kind=kind))
+    obj = save_establishment(actor, dict(_resolve_identity(_identity(record)), kind=kind))
     try:
         with transaction.atomic():
             SourceLink.objects.create(establishment=obj, source=source, external_id=external_id,
-                details=_source_map_details(obj, record), is_demo=False, is_primary=True,
+                details=_source_map_details(obj, record), is_primary=True,
                 linked_by=actor, last_synced_at=timezone.now())
     except IntegrityError as exc:
         raise ValidationError("A concurrent import claimed this record; it will be retried.") from exc
@@ -315,7 +476,7 @@ def sync_related_mappings(actor, establishment, source, record):
         try:
             with transaction.atomic():
                 SourceLink.objects.update_or_create(establishment=establishment, source=related_source,
-                    defaults={"external_id": str(external_id), "details": {}, "is_demo": False,
+                    defaults={"external_id": str(external_id), "details": {},
                         "derived_from": source, "linked_by": actor, "last_synced_at": timezone.now()})
         except IntegrityError as exc:
             raise ValidationError("This archive or survey ID is already mapped to another establishment.") from exc

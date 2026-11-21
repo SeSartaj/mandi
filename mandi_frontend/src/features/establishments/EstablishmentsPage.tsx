@@ -1,9 +1,9 @@
 import RegistrySyncStatus from "./RegistrySyncStatus";
 import RegistryImport from "./RegistryImport";
-import { useEstablishmentKinds } from "@/features/establishments/registry";
+import { useEstablishmentKinds, useLocationName } from "@/features/establishments/registry";
 import { CreateButton } from "@/components/public/ActionButton";
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { Search, Tags } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import EstablishmentForm from "@/features/establishments/EstablishmentForm";
+import EstablishmentTypesDialog from "@/features/establishments/EstablishmentTypesDialog";
 import { useApiQuery } from "@/features/shared/api";
 import { choiceLabel, pageCount } from "@/features/shared/labels";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
@@ -29,12 +30,14 @@ import { errorMessage } from "@/lib/api";
 export default function EstablishmentsPage() {
   const { t } = useTranslation();
   const establishmentKinds = useEstablishmentKinds();
+  const locationName = useLocationName();
   const { params, update, page, setPage } = useListParams();
   const search = params.get("search") ?? "";
   const debouncedSearch = useDebouncedValue(search, 300);
   const kind = params.get("kind") ?? "";
   const [pageSize, setPageSize] = useTablePageSize();
   const [open, setOpen] = useState(false);
+  const [typesOpen, setTypesOpen] = useState(false);
   const data = useApiQuery<Page<Establishment>>(["establishments"], "/establishments/", {
     search: debouncedSearch,
     kind,
@@ -54,12 +57,18 @@ export default function EstablishmentsPage() {
         title={kind ? `${t(choiceLabel(kind))} · ${t("Establishments")}` : t("Establishments")}
         description={t("Monitoring & inspection registry")}
         actions={
-          <Can permission="establishments.add_establishment">
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Can permission="establishments.change_establishment">
+              <Button variant="outline" onClick={() => setTypesOpen(true)}>
+                <Tags />
+                {t("Establishment types")}
+              </Button>
+            </Can>
+            <Can permission="establishments.add_establishment">
               <RegistryImport />
               <CreateButton onClick={() => setOpen(true)} label={t("Add establishment")} />
-            </div>
-          </Can>
+            </Can>
+          </div>
         }
       >
         <div className="space-y-4">
@@ -134,8 +143,18 @@ export default function EstablishmentsPage() {
                       </Link>
                     </TableCell>
                     <TableCell>{t(choiceLabel(establishment.kind))}</TableCell>
-                    <TableCell>{establishment.province}</TableCell>
-                    <TableCell>{establishment.district || "—"}</TableCell>
+                    <TableCell>
+                      {locationName(
+                        establishment.province_name,
+                        establishment.province_name_local,
+                      ) || "—"}
+                    </TableCell>
+                    <TableCell>
+                      {locationName(
+                        establishment.district_name,
+                        establishment.district_name_local,
+                      ) || "—"}
+                    </TableCell>
                     <TableCell>
                       <Link to={`/establishments/${establishment.id}`} className="text-link">
                         {t("View")}
@@ -165,6 +184,8 @@ export default function EstablishmentsPage() {
       >
         <EstablishmentForm onClose={() => setOpen(false)} />
       </AppDialog>
+
+      <EstablishmentTypesDialog open={typesOpen} onOpenChange={setTypesOpen} />
     </div>
   );
 }

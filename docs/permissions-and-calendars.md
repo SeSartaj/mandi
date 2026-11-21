@@ -2,7 +2,7 @@
 
 ## Permission groups
 
-`accounts.0002_predefined_groups` installs six groups with explicit Django permissions. Fresh databases receive them during `migrate`; `seed_demo` only assigns existing groups. The migration upgrades the original Review managers and Review readers group names.
+`accounts.0003_predefined_groups` installs six groups with explicit Django permissions. Fresh databases receive them during `migrate`. The migration upgrades the original Review managers and Review readers group names.
 
 | Group | Access |
 | --- | --- |

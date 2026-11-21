@@ -25,8 +25,7 @@ class LicensingAdapter:
         category = self.category(kind)
         payload = self.list_applications(category, {"search": search, "page": page, "page_size": page_size})
         records = payload if isinstance(payload, list) else payload["results"]
-        return {"is_demo": False,
-                "count": len(records) if isinstance(payload, list) else payload.get("count", len(records)),
+        return {"count": len(records) if isinstance(payload, list) else payload.get("count", len(records)),
                 "has_next": False if isinstance(payload, list) else bool(payload.get("next")),
                 "results": [licensing.candidate(category, record) for record in records]}
 
@@ -64,7 +63,7 @@ ADAPTERS = {"licensing": LicensingAdapter(), "registration": RegistrationAdapter
 
 
 def licensing_uses_registration():
-    return (not settings.DEMO_INTEGRATIONS and not licensing.configured()
+    return (not licensing.configured()
             and bool(settings.REGISTRATION_BASE_URL and settings.REGISTRATION_API_KEY))
 
 

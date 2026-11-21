@@ -20,7 +20,6 @@ import { api, errorMessage, fileUrl } from "@/lib/api";
 type ChecklistValues = {
   code: string;
   name: string;
-  version: string;
   establishment_kind: string;
   xlsform: File | null;
 };
@@ -39,7 +38,6 @@ export default function ChecklistForm({
     defaultValues: {
       code: existing?.code ?? "",
       name: existing?.name ?? "",
-      version: existing?.version ?? "",
       establishment_kind: existing?.establishment_kind ?? "",
       xlsform: null,
     },
@@ -59,14 +57,14 @@ export default function ChecklistForm({
     setReading(true);
     setMetadataError(null);
     api
-      .post<Partial<Record<"name" | "code" | "version" | "establishment_kind", string>>>(
+      .post<Partial<Record<"name" | "code" | "establishment_kind", string>>>(
         "/checklists/metadata/",
         body,
         { signal: controller.signal },
       )
       .then(({ data }) => {
         if (controller.signal.aborted) return;
-        for (const field of ["name", "code", "version", "establishment_kind"] as const) {
+        for (const field of ["name", "code", "establishment_kind"] as const) {
           // Never overwrite existing records or values the user has edited.
           if (!form.getFieldState(field).isDirty && !existing) {
             form.setValue(field, data[field] ?? "", { shouldValidate: true });
@@ -86,7 +84,6 @@ export default function ChecklistForm({
       const body = new FormData();
       body.append("code", values.code);
       body.append("name", values.name);
-      body.append("version", values.version);
       body.append("establishment_kind", values.establishment_kind);
       if (values.xlsform) body.append("xlsform", values.xlsform);
       return (
@@ -142,12 +139,6 @@ export default function ChecklistForm({
             form={form}
             name="code"
             label={t("Checklist code")}
-            rules={{ required: t("Required") }}
-          />
-          <FormInput
-            form={form}
-            name="version"
-            label={t("Version")}
             rules={{ required: t("Required") }}
           />
           <FormSelect

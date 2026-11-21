@@ -19,17 +19,15 @@ export function GlobalBreadcrumb() {
   const [section, id, child, source] = pathname.split("/").filter(Boolean);
   const labels: Record<string, string> = {
     establishments: "Establishments",
-    inspections: "Inspections",
     checklists: "Checklists",
-    submissions: "Submission",
-    reports: "Coverage",
+    submissions: "Submissions",
     employees: "Employees",
   };
   const items: { label: string; href?: string }[] = [
     { label: "Overview", href: section ? "/" : undefined },
   ];
   if (section === "submissions") {
-    items.push({ label: "Checklists", href: "/checklists" }, { label: "Submission" });
+    items.push({ label: "Submissions", href: id ? "/submissions" : undefined });
   } else if (section) {
     items.push({
       label: labels[section] ?? "Page not found.",

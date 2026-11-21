@@ -1,12 +1,36 @@
 """ODK Central HTTP adapter. No access to Central's database or Docker runtime."""
 
+import io
+import json
+import zlib
+from base64 import b64encode
 from urllib.parse import quote, urljoin, urlsplit
 
 import requests
+import segno
 from django.conf import settings
 from django.utils.dateparse import parse_datetime
 
 from .providers import CollectionError, RemoteSubmission
+
+
+def build_settings_qr(server_url, project_name="Mandi"):
+    """Build an ODK Collect settings QR (zlib + base64 JSON, per Collect docs)."""
+    payload = {
+        "general": {
+            "server_url": server_url,
+            # Collect downloads the newest published version at project open and
+            # checks again periodically, so no manual "Get Blank Form" is needed.
+            "form_update_mode": "previously_downloaded",
+            "periodic_form_updates_check": "every_fifteen_minutes",
+        },
+        "admin": {},
+        "project": {"name": project_name, "icon": "M", "color": "#005a5a"},
+    }
+    encoded = b64encode(zlib.compress(json.dumps(payload).encode("utf-8")))
+    buffer = io.BytesIO()
+    segno.make(encoded, micro=False).save(buffer, kind="png", scale=6, border=2)
+    return "data:image/png;base64," + b64encode(buffer.getvalue()).decode()
 
 
 def request(method, path, **kwargs):
@@ -41,6 +65,17 @@ def request(method, path, **kwargs):
 def form_path(project, form_id):
     return f"projects/{int(project)}/forms/{quote(str(form_id), safe='')}"
 
+def list_projects():
+    return request("GET", "projects").json()
+
+
+def create_project(name):
+    return request("POST", "projects", json={"name": name}).json()
+
+
+def update_project(project_id, payload):
+    return request("PATCH", f"projects/{int(project_id)}", json=payload).json()
+
 
 class OdkProvider:
     name = "odk"
@@ -60,35 +95,86 @@ class OdkProvider:
         )
         return request("GET", path, stream=True)
 
-    def deploy(self, deployment, content, establishments_csv):
+    @staticmethod
+    def _response(exc):
+        cause = exc.__cause__
+        return getattr(cause, "response", None)
+
+    @classmethod
+    def _missing(cls, exc):
+        response = cls._response(exc)
+        return response is not None and response.status_code == 404
+
+    @classmethod
+    def _structure_warning(cls, exc):
+        response = cls._response(exc)
+        if response is None or response.status_code != 400:
+            return False
+        try:
+            return (response.json() or {}).get("code") == 400.16
+        except ValueError:
+            return False
+
+    @classmethod
+    def _structure_fields(cls, exc):
+        response = cls._response(exc)
+        try:
+            body = response.json() if response is not None else {}
+        except ValueError:
+            body = {}
+        details = body.get("details") if isinstance(body, dict) else None
+        fields = (details or {}).get("fields") if isinstance(details, dict) else None
+        return [str(item) for item in fields or []]
+
+    @classmethod
+    def _structure_error(cls, exc):
+        fields = cls._structure_fields(exc)
+        changed = ", ".join(fields) if fields else "one or more questions or choice lists"
+        return CollectionError(
+            "The form's structure differs from the version already published in "
+            f"ODK Central ({changed}). Mandi will not overwrite the structure "
+            "silently because existing submissions could become unreadable. "
+            "Hint: keep existing question names, types and choice lists unchanged; "
+            "publish structural changes as a new checklist with a new code so it "
+            "gets its own form."
+        )
+
+    def deploy(self, deployment, content, establishments_csv, force=False):
         base = form_path(deployment.project_id, deployment.form_id)
+        headers = {
+            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
+
+        def upload(path, **kwargs):
+            try:
+                return request("POST", path, **kwargs)
+            except CollectionError as exc:
+                if not self._structure_warning(exc):
+                    raise
+                if not force:
+                    error = self._structure_error(exc)
+                    error.structure_conflict = True
+                    raise error from exc
+                # Explicit operator confirmation: publish the structural change.
+                params = dict(kwargs.get("params") or {})
+                params["ignoreWarnings"] = "true"
+                kwargs["params"] = params
+                return request("POST", path, **kwargs)
+
         # Probe first: never interpret auth/network/server errors as 'form missing'.
         try:
             request("GET", base)
         except CollectionError as exc:
-            if (
-                not isinstance(exc.__cause__, requests.HTTPError)
-                or exc.__cause__.response.status_code != 404
-            ):
+            if not self._missing(exc):
                 raise
-            request(
-                "POST",
+            upload(
                 f"projects/{deployment.project_id}/forms",
                 params={"publish": "false"},
                 data=content,
-                headers={
-                    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                },
+                headers=headers,
             )
         else:
-            request(
-                "POST",
-                base + "/draft",
-                data=content,
-                headers={
-                    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                },
-            )
+            upload(base + "/draft", data=content, headers=headers)
         attachments = request("GET", base + "/draft/attachments").json()
         if any(item["name"] == "establishments.csv" for item in attachments):
             request(
@@ -147,13 +233,23 @@ class OdkProvider:
             submission_id=data.get("__id") or "",
             establishment_id=data.get("establishment_id") or "",
             submitted_at=parse_datetime(timestamp),
-            inspector_id=str(metadata["submitterId"])
-            if metadata.get("submitterId") is not None
-            else None,
-            inspected_on=data.get("inspected_on") or timestamp[:10],
-            inspection_kind=data.get("inspection_kind") or "comprehensive",
+            form_version=str(metadata.get("formVersion") or ""),
             data=data,
         )
+
+    def form_versions(self, deployment):
+        """Published form versions, newest first, as shown in Central."""
+        payload = request("GET", form_path(deployment.project_id, deployment.form_id) + "/versions").json()
+        versions = []
+        for item in payload.get("value", []):
+            version = str(item.get("version") or "")
+            if not version:
+                continue
+            versions.append(
+                {"version": version, "published_at": item.get("publishedAt")}
+            )
+        versions.sort(key=lambda item: item["version"], reverse=True)
+        return versions
 
     def provision_collector(self, deployment, display_name):
         root = f"projects/{deployment.project_id}"
@@ -169,11 +265,14 @@ class OdkProvider:
         except CollectionError:
             request("DELETE", root + f"/app-users/{user['id']}")
             raise
+        server_url = f"{settings.ODK_PUBLIC_URL.rstrip('/')}/v1/key/{quote(user['token'], safe='')}/projects/{deployment.project_id}"
+        project_name = getattr(getattr(deployment, "checklist", None), "name", None) or f"Mandi project {deployment.project_id}"
         return {
             "id": str(user["id"]),
             "configuration": {
-                "server_url": f"{settings.ODK_PUBLIC_URL.rstrip('/')}/v1/key/{quote(user['token'], safe='')}/projects/{deployment.project_id}",
-                "message": "Save this ODK Collect server URL now. Mandi does not store the token.",
+                "server_url": server_url,
+                "qr": build_settings_qr(server_url, project_name),
+                "message": "Scan this QR in ODK Collect, or save the server URL. Mandi does not store the token.",
             },
         }
 

@@ -4,8 +4,6 @@ from apps.integrations.models import CollectorGrant
 from apps.integrations.providers import CollectionError, provider
 from apps.integrations.submissions import extract_scores, submission_answers
 from apps.integrations.submissions import flatten_answers as flatten
-from django.conf import settings
-from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
@@ -14,6 +12,14 @@ from rest_framework.views import APIView
 
 from .common import paginated, validated
 from .serializers import SubmissionFilters
+
+
+def _attachment_chunks(response):
+    """Close the upstream connection when streaming finishes or is interrupted."""
+    try:
+        yield from response.iter_content(chunk_size=8192)
+    finally:
+        response.close()
 
 
 class CollectionSubmissionSerializer(serializers.Serializer):
@@ -41,25 +47,21 @@ class CollectionSubmissionSerializer(serializers.Serializer):
             "provider": obj.deployment.provider,
             "checklist_id": checklist.pk,
             "checklist_name": checklist.name,
-            "checklist_version": checklist.version,
+            "form_version": obj.form_version,
             "establishment_id": str(obj.establishment_id),
             "establishment_name": obj.establishment.name,
+            "establishment_kind": obj.establishment.kind_id,
             "submitted_at": obj.submitted_at,
             "scores": extract_scores(data),
             "answers": answers,
             "attachments": attachments,
-            "kobo_url": collection.deployment_url(obj.deployment),
+            "form_url": collection.deployment_url(obj.deployment),
             "data": obj.data,
         }
 
 
 class CollectionSync(APIView):
     def post(self, request):
-        if settings.COLLECTION_PROVIDER == "kobo":
-            from .submissions import KoboSync
-
-            return KoboSync().post(request)
-
         class Input(serializers.Serializer):
             checklist_id = serializers.IntegerField(min_value=1, required=False)
             establishment_id = serializers.UUIDField(required=False)
@@ -70,39 +72,24 @@ class CollectionSync(APIView):
 
 class CollectionSubmissions(APIView):
     def get(self, request, pk=None, establishment_pk=None):
-        if settings.COLLECTION_PROVIDER == "kobo":
-            from .submissions import ChecklistSubmissions, EstablishmentKoboSubmissions
-
-            return (
-                ChecklistSubmissions().get(request, pk)
-                if pk
-                else EstablishmentKoboSubmissions().get(request, establishment_pk)
-            )
         filters = validated(
             SubmissionFilters,
             {k: v for k, v in request.query_params.items() if v != ""},
         )
         qs = collection.submissions(
-            request.user, pk, establishment_pk or filters.get("establishment_id")
+            request.user,
+            pk or filters.get("checklist_id"),
+            establishment_pk or filters.get("establishment_id"),
+            filters.get("establishment_kind"),
+            filters.get("search"),
+            filters.get("date_from"),
+            filters.get("date_to"),
         )
-        if filters.get("search"):
-            qs = qs.filter(
-                Q(establishment__name__icontains=filters["search"])
-                | Q(submission_id__icontains=filters["search"])
-            )
-        if filters.get("date_from"):
-            qs = qs.filter(submitted_at__date__gte=filters["date_from"])
-        if filters.get("date_to"):
-            qs = qs.filter(submitted_at__date__lte=filters["date_to"])
         return paginated(request, qs, CollectionSubmissionSerializer)
 
 
 class CollectionSubmissionDetail(APIView):
     def get(self, request, pk):
-        if settings.COLLECTION_PROVIDER == "kobo":
-            from .submissions import KoboSubmissionDetail
-
-            return KoboSubmissionDetail().get(request, pk)
         return Response(
             CollectionSubmissionSerializer(
                 get_object_or_404(collection.submissions(request.user), pk=pk)
@@ -170,15 +157,9 @@ class CollectorAccess(APIView):
 
 class CollectionAttachment(APIView):
     def get(self, request, pk, index):
-        if settings.COLLECTION_PROVIDER == "kobo":
-            from .submissions import KoboSubmissionAttachment
-
-            return KoboSubmissionAttachment().get(request, pk, index)
         from apps.integrations.submissions import submission_attachments
         from django.http import StreamingHttpResponse
         from django.utils.http import content_disposition_header
-
-        from .submissions import attachment_chunks
 
         obj = get_object_or_404(collection.submissions(request.user), pk=pk)
         attachments = submission_attachments(obj.data)
@@ -194,7 +175,7 @@ class CollectionAttachment(APIView):
         except CollectionError as exc:
             raise ValidationError(str(exc)) from exc
         response = StreamingHttpResponse(
-            attachment_chunks(upstream),
+            _attachment_chunks(upstream),
             content_type=attachment["mimetype"] or "application/octet-stream",
         )
         response["Content-Disposition"] = content_disposition_header(

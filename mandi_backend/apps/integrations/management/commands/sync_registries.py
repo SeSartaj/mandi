@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
     help = "Automatically create and refresh primary registry establishments in bounded batches."
-
     def add_arguments(self, parser):
         parser.add_argument("--once", action="store_true")
         parser.add_argument("--full", action="store_true", help="Run one complete pass, then exit.")
@@ -21,11 +20,13 @@ class Command(BaseCommand):
     def handle(self, **options):
         while True:
             try:
-                if settings.REGISTRATION_SYNC_ENABLED:
+                # Explicit runs are allowed even when continuous polling is off,
+                # so an operator can import one source on demand.
+                if settings.REGISTRATION_SYNC_ENABLED or options["once"] or options["full"]:
                     actor = get_user_model().objects.get(username=os.environ.get("MANDI_SYNC_USERNAME") or os.environ.get("MANDI_ADMIN_USERNAME", "admin"), is_active=True)
                     sync_operation = sync_all if options["full"] else sync_batch
                     counts = sync_operation(actor, options["source"], settings.REGISTRATION_SYNC_PAGE_SIZE)
-                    logger.info("Registry sync counts: %s", counts)
+                    logger.info("Registry sync (%s) counts: %s", options["source"], counts)
             except Exception:
                 # No exception body/traceback: third-party exceptions can contain secrets.
                 logger.error("Registry sync failed; check server configuration. Will retry.")

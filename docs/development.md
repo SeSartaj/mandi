@@ -68,7 +68,8 @@ python3 -m venv .venv
 .venv/bin/pip install -r mandi_backend/requirements.txt
 cp mandi_backend/.env.example mandi_backend/.env   # omit POSTGRES_DB for SQLite
 .venv/bin/python mandi_backend/manage.py migrate
-MANDI_DEMO_PASSWORD='choose-your-local-review-password' .venv/bin/python mandi_backend/manage.py seed_demo
+.venv/bin/python mandi_backend/manage.py seed_locations   # 34 provinces + 401 districts
+.venv/bin/python mandi_backend/manage.py createsuperuser
 .venv/bin/python mandi_backend/manage.py runserver 127.0.0.1:8000
 ```
 
@@ -79,7 +80,7 @@ npm --prefix mandi_frontend ci
 npm --prefix mandi_frontend run dev -- --host 127.0.0.1
 ```
 
-Open http://127.0.0.1:5174 and sign in as `reviewer`, using the password supplied to `seed_demo`. Existing account passwords are not reset when seeding again. The frontend API defaults to `/api/v1` on the frontend origin. Vite proxies `/api` and `/media` to Django at `127.0.0.1:8000`, so browsers on other devices do not call their own localhost. Override `VITE_API_URL` in `mandi_frontend/.env` for a separate API host; production hosting must forward `/api` and `/media` to Django. The backend loads its `.env` automatically; process environment variables take precedence.
+Open http://127.0.0.1:5174 and sign in with the superuser you created. The frontend API defaults to `/api/v1` on the frontend origin. Vite proxies `/api` and `/media` to Django at `127.0.0.1:8000`, so browsers on other devices do not call their own localhost. Override `VITE_API_URL` in `mandi_frontend/.env` for a separate API host; production hosting must forward `/api` and `/media` to Django. The backend loads its `.env` automatically; process environment variables take precedence.
 
 PostgreSQL is required when `DJANGO_DEBUG=0`. The database-only Compose file used by earlier review builds has been removed; use the full stack above for PostgreSQL and ODK collection.
 
@@ -121,99 +122,63 @@ The authenticated `GET /api/v1/schema/` endpoint returns an OpenAPI 3 contract g
 
 See [permissions-and-calendars.md](permissions-and-calendars.md) for migration-installed groups, Can guards, copied form components, and calendar conversion.
 
-## KoBo checklist deployment
+## Checklist deployment and collection (ODK Central)
 
-The local `kobo-install` stack is expected to be running with nginx on port `80`.
-In this environment `kf.kobo.local` resolves through a Host header rather than
-DNS, so the backend uses:
+Checklists are deployed through the configured collection provider
+(`COLLECTION_PROVIDER`, default `odk`). Deployment requires the
+`inspections.deploy_checklist` permission, which Mandi administrators and
+integration operators receive.
 
-```bash
-KOBO_BASE_URL=http://127.0.0.1
-KOBO_HOST_HEADER=kf.kobo.local
-KOBO_API_TOKEN=<token>
-KOBO_VERIFY_TLS=0
-```
-
-The token belongs to the KoBo superuser. The backend imports the checklist
-XLSForm through `/api/v2/imports/`, waits for the import task, then creates or
-redeploys the asset through `/api/v2/assets/{uid}/deployment/`.
-
-- `POST /api/v1/checklists/{id}/deploy/` requires
-  `inspections.deploy_checklist`.
-- Mandi administrators and integration operators receive that permission.
-- Deployment prepares the XLSForm automatically:
-  - Adds a first `select_one_from_file establishments.csv` question named
-    `establishment_id` with search appearance when it is missing.
-  - Converts `.xls` to `.xlsx` with LibreOffice when necessary.
-  - Generates `establishments.csv` from Mandi establishments, ordered by most
-    recently updated, and attaches it as KoBo form media.
-  - Re-imports the form after attaching the CSV so KoBo preserves the external
-    choice list.
-- The checklist stores the KoBo asset UID, deployment status, error message,
-  deployer, and deployment time.
-- A failed KoBo import or deployment returns the KoBo error in the checklist row
-  and shows a failure message in the UI.
-- Upload or replace the XLSForm before deploying. Re-deploying updates the
-  existing KoBo asset when it still exists.
-
-## KoBo submissions per establishment
-
-- `GET /api/v1/integrations/kobo/establishments.csv` downloads the same
-  establishment CSV for form builders and diagnostics.
-- `POST /api/v1/integrations/kobo/sync/` pulls submissions from deployed KoBo
-  assets. Use `{"establishment_id": "..."}` to limit the sync to one
-  establishment.
-- Submissions are stored in `KoboSubmission` and matched through the form's
-  `establishment_id` answer.
-- `GET /api/v1/establishments/{id}/kobo-submissions/` returns stored submissions.
-- Each sync also copies the deployed form's question and choice labels into
-  `KoboSubmission.form_schema`, so Mandi can show readable answers without
-  calling KoBo again.
-- The serializer derives `scores` from the form's calculated fields
-  (`score_<key>`, `max_<key>`, `pct_<key>`, `result_pct`), `answers` from the
-  answered questions (choice values translated through the stored schema), and
-  `kobo_url` pointing at the KoBo data table of the deployed form.
-- KoBo stores answers inside their group or repeat (`sec2/q2_1`,
-  `samples[1]/name`), so keys are normalised to the bare question name before
-  labels, choices, and scores are resolved.
-- Section order uses `order_<key>`, then the leading number in `title_<key>`,
-  then a canonical hint list, because KoBo returns JSON keys unordered.
-- The establishment detail page has a **KoBo inspections** panel with a
-  **Sync from KoBo** button, the final score per submission, section score bars,
-  the answered questions, an **Open in KoBo** link, and the raw submission JSON.
+- `POST /api/v1/checklists/{id}/deploy/` prepares the XLSForm, adds a first
+  `select_one_from_file establishments.csv` question named `establishment_id`
+  when missing, inserts read-only establishment detail rows after it, and
+  publishes the form to the provider.
+- The detail rows are wrapped in one `field-list` group, so Collect shows the
+  whole Licensing profile on a single page instead of one page per field. They
+  use `pulldata('establishments', '<column>', 'name', ${establishment_id})`
+  calculations plus notes, so collectors see the selected establishment's
+  province, district, address, license number/dates, grade, owner, owner
+  phone/email, technical manager and phone, technical staff count, and
+  activities offline. Empty values are hidden with `relevant`.
+- `GET /api/v1/integrations/establishments.csv` downloads the establishment CSV
+  used by that question, including those Licensing fields from the stored
+  business/contact projection. It requires `inspections.deploy_checklist`
+  because it contains owner/technical-manager contact details.
+- Adding the detail rows changes the form structure, so an already-published
+  form must normally be published under a new checklist code/version rather than
+  redeployed in place; Central's structure warning is reported with a hint. The
+  deploy dialog also offers **Publish anyway**, which retries with Central's
+  `ignoreWarnings=true` after an explicit confirmation; use it only when you
+  accept that older submissions may become unreadable.
+- `POST /api/v1/integrations/collection/sync/` pulls submissions from deployed
+  forms. Pass `{"checklist_id": ...}` or `{"establishment_id": ...}` to limit a
+  sync.
+- Stored submissions live in `CollectionSubmission`; deployment metadata is in
+  `FormDeployment`, and collection access grants are in `CollectorGrant`.
 
 ## Browsing checklists and submissions
 
 - `GET /api/v1/checklists/{id}/` returns one checklist with `submission_count`.
-- `POST /api/v1/checklists/{id}/link-kobo/` with `{"asset_uid": "..."}` attaches
-  an **existing** KoBo project to a checklist. Projects created directly in KoBo
-  are not imported automatically; use this to adopt one so its submissions can
-  be synced. The UID cannot be linked to two checklists.
-- Deleting a Mandi checklist never deletes the KoBo project; the project stays
-  in KoBo and can be re-linked with the endpoint above.
-- `GET /api/v1/checklists/{id}/submissions/` lists the submissions of a single
-  checklist. Query parameters: `search` (establishment name or submission id),
-  `establishment_id`, `date_from`, `date_to`, plus `page` and `page_size`.
-- `GET /api/v1/kobo-submissions/{id}/` returns one submission with scores,
-  typed answers, attachments, and the KoBo link.
-- `GET /api/v1/kobo-submissions/{id}/attachments/{index}/` streams an uploaded
-  file from KoBo through the backend, so the browser never needs the KoBo API
-  token. Only KoBo hosts are accepted.
-- `form_schema` also stores `types`, `paths`, `groups`, and `order`, so answers
-  keep their form order and carry their section label and field type. Media
-  questions render the matched upload (`_attachments`) inline; geopoints link to
+- `GET /api/v1/checklists/{id}/collection-submissions/` lists the submissions of
+  one checklist. Query parameters: `search`, `establishment_id`, `date_from`,
+  `date_to`, plus `page` and `page_size`.
+- `GET /api/v1/collection-submissions/{id}/` returns one submission with scores,
+  typed answers, and attachments.
+- `GET /api/v1/collection-submissions/{id}/attachments/{index}/` streams an
+  uploaded file through the backend.
+- `form_schema` stores `types`, `paths`, `groups`, and `order`, so answers keep
+  their form order and carry their section label and field type. Media questions
+  render the matched upload (`_attachments`) inline; geopoints link to
   OpenStreetMap; other files appear as links.
 - UI routes: `/checklists/:id` (submission browser with search and filters) and
   `/submissions/:id` (single submission with section scores, grouped answers,
   files, and raw JSON).
 
-Restart the backend after changing KoBo environment variables.
-
 ## Integration boundary
 
-`GET /api/v1/integrations/establishment-choices/?kind=pharmacy` returns stable Mandi IDs as choice names and readable labels. It is an authenticated JSON export, not yet a deployed KoBo preload/pull integration.
+`GET /api/v1/integrations/establishment-choices/?kind=pharmacy` returns stable Mandi IDs as choice names and readable labels. It is an authenticated JSON export, not a live preload/pull integration.
 
-`POST /api/v1/integrations/ingest/` accepts normalized inspection summaries. It requires the inspection-add permission. Provider adapters and actual KoBo field mappings are not implemented yet. The input's mapping version records which mapping produced a result; it does not perform mapping itself.
+`POST /api/v1/integrations/ingest/` accepts normalized inspection summaries. It requires the inspection-add permission. Provider adapters and actual field mappings are not implemented yet. The input's mapping version records which mapping produced a result; it does not perform mapping itself.
 
 Submission identity is `(provider, provider_form_id, submission_id)`. An unchanged retry preserves the record and approval. A changed submission updates the existing record, resets approval, and creates an audit entry. This is a conservative provisional rule for review, not a finalized rejection/revision workflow.
 
@@ -221,7 +186,25 @@ Selected summaries currently support overall percentage, named sections with ear
 
 Source links currently allow one external record per source per establishment, and prevent the same source record from being connected to two Mandi establishments. Review this assumption if source systems represent branches or duplicates differently.
 
-Disable demo source lookup with `DEMO_INTEGRATIONS=0`. Live adapters then report unavailable rather than returning pretend live data.
+## Licensing registry import
+
+Licensing is configured with `LICENSING_BASE_URL` and
+`LICENSING_REGISTRATION_API_KEY`. The `licensing` external system is active and
+searchable by default; the catalog reports it as connected when both values are
+set.
+
+To import every active Licensing category (`company`, `factory`, `pharmacy`,
+`wholesale`) once and link each record as the establishment's primary identity:
+
+```bash
+.venv/bin/python mandi_backend/manage.py sync_registries --full --source licensing
+```
+
+Explicit `--once`/`--full` runs work even when continuous polling
+(`REGISTRATION_SYNC_ENABLED`) is off. The import is idempotent: rerunning it
+updates changed identities and reports unchanged records. Because Licensing is
+primary, local edits to imported names and locations are blocked; use the
+refresh action or rerun the import instead.
 
 ## Checks
 
@@ -303,26 +286,39 @@ the response finishes.
 
 The supplied API contract is saved in [licensing-api-reference.md](licensing-api-reference.md).
 Set `LICENSING_BASE_URL`, `LICENSING_REGISTRATION_API_KEY`, and optionally
-`LICENSING_TIMEOUT` in `mandi_backend/.env`. The development origin is currently
-`http://10.10.0.125:8001`; the development key is stored only in the ignored server
-environment. Restart the backend after changing environment settings.
+`LICENSING_TIMEOUT` in `mandi_backend/.env` (and in the root `.env` for Compose).
+Production currently points at `http://192.168.1.4:8008`; the key is stored only
+in the ignored server environment. Restart the backend after changing
+environment settings.
 
-On an establishment detail page, use **Licensing → Connect** to search and page
-through applications, then select a record. Mandi maps importer → company,
-factory → factory, pharmacy → pharmacy, and wholesaler → wholesale. A live
-configured Licensing client takes precedence over demo integrations for this
-source; Survey and Archive retain their existing behavior.
+To import every active Licensing category and link each record as the primary
+establishment identity:
 
-Source identities include category and exact application ID (`company:APP-123`)
-to avoid cross-category collisions. Connecting a record fetches its detail
-endpoint on demand and stores only a minimal business/location projection, not
-identity documents, applicant contacts, or the full upstream response. Existing
-Mandi source-link permissions are enforced. List requests remain paginated;
-the client also accepts a plain array response. No upstream pagination URLs
-are followed directly.
+```bash
+.venv/bin/python mandi_backend/manage.py sync_registries --full --source licensing
+```
 
-Verification on 2026-11-10: mocked client/workflow checks cover categories,
-headers, pagination, null fields, detail lookup, and failure handling. Live calls
-at `http://10.10.0.125:8001` succeeded for all four category lists. Company and
-Factory detail lookups also succeeded. Pharmacy and Wholesale lists were empty,
-so their live detail endpoints could not be checked with an existing record.
+The import is idempotent and works even when continuous polling is off. Because
+Licensing is primary, local edits to imported names and locations are blocked;
+use refresh or rerun the import instead. Development-only records must not be
+mixed with production IDs: clear them before switching origins.
+
+On an establishment detail page, linked Licensing records show a
+**Licensing details** section immediately: establishment identity and status,
+license number/dates and documents, location with map coordinates, ownership and
+applicant contacts, technical staff, and activities/premises. Inspection dates
+and checklist questions stay in the collection forms and are not copied from
+Licensing. Users with `view_sourcelink` can open **Licensing → Connect** under
+Source systems to search and page through applications, then select a record.
+
+Mandi maps importer → company, factory → factory, pharmacy → pharmacy, and
+wholesaler → wholesale. Source identities include category and exact application
+ID (`company:APP-123`) to avoid cross-category collisions. The detail endpoint is
+loaded on demand; Mandi stores only a minimal business/location projection, not
+identity documents or the full upstream response. Existing Mandi source-link
+permissions are enforced. List requests remain paginated; the client also accepts
+a plain array response. No upstream pagination URLs are followed directly.
+
+Verified on 2026-11-21 against production: company 429, factory 73, pharmacy 955,
+wholesale 0. List, identity, and detail lookups succeeded for all populated
+categories.

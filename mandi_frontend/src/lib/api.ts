@@ -80,135 +80,112 @@ export type Establishment = {
   id: string;
   name: string;
   kind: string;
-  subtype: string;
-  province: string;
-  district: string;
+  province: string | null;
+  province_name: string | null;
+  province_name_local: string | null;
+  district: string | null;
+  district_name: string | null;
+  district_name_local: string | null;
   address: string;
   latitude: number | null;
   longitude: number | null;
-  phone: string;
   source_links: SourceLink[];
   primary_source?: string | null;
-  attributes?: Record<string, unknown>;
-  license_number?: string;
-  status?: string;
+  created_at: string;
+  updated_at: string;
 };
 export type SourceLink = {
   id: number;
   source: string;
   external_id: string;
   details: Record<string, unknown>;
-  is_demo: boolean;
   linked_at: string;
   is_primary?: boolean;
   last_synced_at?: string | null;
 };
-export type Inspection = {
-  id: number;
-  establishment_id: string;
-  establishment_name: string;
-  establishment_snapshot?: Record<string, unknown>;
-  inspected_on: string;
-  kind: string;
-  checklist: { id: number; name: string; version: string };
-  team: Employee[];
-  provider: string;
-  submission_id: string;
-  mapping_version: string;
-  summary: {
-    overall_percent?: number;
-    sections?: { name: string; earned: number; possible: number }[];
-    findings?: { issue: string; action: string; deadline: string }[];
-  };
-  approved: boolean;
-  approved_by: Employee | null;
-  approved_at: string | null;
-  is_demo: boolean;
+export type EstablishmentType = {
+  code: string;
+  name: string;
+  is_active: boolean;
 };
-export type Coverage = {
-  establishments: number;
-  inspected: number;
-  uninspected: number;
-  visits: number;
-  approved: number;
-  unapproved: number;
-  coverage_percent: number;
+export type OdkProject = {
+  id: number;
+  name: string;
+  description: string;
+  archived: boolean;
 };
 export type Checklist = {
   id: number;
   code: string;
   name: string;
-  version: string;
   establishment_kind: string;
   xlsform: string | null;
   collection: {
     provider: string;
+    project_id: number | null;
     form_id: string;
     status: "not_deployed" | "deploying" | "deployed" | "failed";
     error: string;
     deployed_at: string | null;
     url: string | null;
   };
-  kobo_asset_uid: string;
-  kobo_project_url?: string | null;
-  kobo_deployment_status: "not_deployed" | "deploying" | "deployed" | "failed";
-  kobo_deployment_error: string;
-  kobo_deployed_at: string | null;
+  allows_all_types: boolean;
   submission_count?: number;
   created_at: string;
   updated_at: string;
 };
-export type KoboScoreSection = {
+export type SubmissionScoreSection = {
   key: string;
   label: string;
   score: number;
   max: number | null;
   percent: number | null;
 };
-export type KoboSubmissionScores = {
-  sections: KoboScoreSection[];
+export type SubmissionScores = {
+  sections: SubmissionScoreSection[];
   score: number | null;
   max: number | null;
   percent: number | null;
 };
-export type KoboAnswerMedia = {
+export type SubmissionAnswerMedia = {
   index: number;
   filename: string;
   mimetype: string;
-  kind: KoboMediaKind;
+  kind: MediaKind;
   url: string | null;
 };
-export type KoboMediaKind = "image" | "audio" | "video" | "pdf" | "file";
-export type KoboAttachment = {
+export type MediaKind = "image" | "audio" | "video" | "pdf" | "file";
+export type SubmissionAttachment = {
   index: number;
   filename: string;
   basename: string;
   mimetype: string;
-  kind: KoboMediaKind;
+  kind: MediaKind;
   url: string;
 };
-export type KoboAnswer = {
+export type SubmissionAnswer = {
   name: string;
   label: string;
   value: unknown;
   display: string;
   type: string;
   group: string;
-  media: KoboAnswerMedia[];
+  media: SubmissionAnswerMedia[];
 };
-export type KoboSubmission = {
+export type Submission = {
   id: number;
   asset_uid: string;
   submission_id: string;
   establishment_id: string;
   establishment_name: string | null;
+  establishment_kind: string;
   checklist_id: number | null;
   checklist_name: string | null;
-  checklist_version: string | null;
+  form_version: string;
   submitted_at: string | null;
-  scores: KoboSubmissionScores;
-  answers: KoboAnswer[];
-  attachments: KoboAttachment[];
-  kobo_url: string | null;
+  scores: SubmissionScores;
+  answers: SubmissionAnswer[];
+  attachments: SubmissionAttachment[];
+  form_url: string | null;
   data: Record<string, unknown>;
 };

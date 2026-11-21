@@ -26,7 +26,6 @@ INSTALLED_APPS = [
     "apps.establishments",
     "apps.inspections",
     "apps.integrations",
-    "apps.reporting",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -104,17 +103,6 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 25,
     "DEFAULT_THROTTLE_RATES": {"login": "10/min"},
 }
-DEMO_INTEGRATIONS = DEBUG and os.getenv("DEMO_INTEGRATIONS", "1") == "1"
-
-# KoBo / kpi integration. For the local kobo-install stack, the nginx port is
-# reachable on localhost while the virtual host remains kf.kobo.local.
-KOBO_BASE_URL = os.getenv("KOBO_BASE_URL", "http://127.0.0.1")
-KOBO_HOST_HEADER = os.getenv("KOBO_HOST_HEADER", "kf.kobo.local")
-KOBO_API_TOKEN = os.getenv("KOBO_API_TOKEN", "")
-KOBO_VERIFY_TLS = os.getenv("KOBO_VERIFY_TLS", "0") == "1"
-KOBO_TIMEOUT = float(os.getenv("KOBO_TIMEOUT", "30"))
-KOBO_POLL_INTERVAL = float(os.getenv("KOBO_POLL_INTERVAL", "1"))
-KOBO_POLL_TIMEOUT = float(os.getenv("KOBO_POLL_TIMEOUT", "60"))
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -128,7 +116,7 @@ LICENSING_REGISTRATION_API_KEY = os.getenv("LICENSING_REGISTRATION_API_KEY", "")
 LICENSING_TIMEOUT = float(os.getenv("LICENSING_TIMEOUT", "15"))
 
 # Collection services remain optional: Mandi starts and serves records during outages.
-COLLECTION_PROVIDER = os.getenv("COLLECTION_PROVIDER", "kobo")
+COLLECTION_PROVIDER = os.getenv("COLLECTION_PROVIDER", "odk")
 ODK_BASE_URL = os.getenv("ODK_BASE_URL", "http://central-service:8383")
 ODK_PUBLIC_URL = os.getenv("ODK_PUBLIC_URL", "")
 ODK_PROJECT_ID = os.getenv("ODK_PROJECT_ID", "1")

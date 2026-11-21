@@ -1,23 +1,8 @@
-from datetime import date
-from unittest.mock import patch
-
-from apps.establishments.models import SourceLink
-from apps.establishments.services import (
-    connect_source,
-    disconnect_source,
-    save_establishment,
-)
-from apps.inspections.models import Checklist, Inspection
-from apps.inspections.services import (
-    approve_inspection,
-    deploy_checklist,
-    ingest_inspection,
-    save_checklist,
-)
-from apps.integrations.kobo import KoboError
-from apps.integrations.models import KoboSubmission
-from apps.integrations.services import sync_kobo_submissions
-from apps.reporting.services import coverage
+from apps.establishments.models import EstablishmentType
+from apps.establishments.services import connect_source, save_establishment
+from apps.inspections.models import Checklist
+from apps.inspections.services import deploy_checklist, save_checklist
+from apps.integrations.models import CollectionSubmission, FormDeployment
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -26,7 +11,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.test import APIClient
 
 
-@override_settings(DEMO_INTEGRATIONS=True, LICENSING_BASE_URL="", COLLECTION_PROVIDER="kobo")
+@override_settings(LICENSING_BASE_URL="")
 class WorkflowTests(TestCase):
     def setUp(self):
         self.manager = get_user_model().objects.create_user(
@@ -44,22 +29,19 @@ class WorkflowTests(TestCase):
             self.manager, {"name": "Second", "kind": "pharmacy", "province": "Kabul"}
         )
         self.checklist = Checklist.objects.create(
-            code="pharmacy", version="1", name="Pharmacy", establishment_kind="pharmacy"
+            code="pharmacy",
+            name="Pharmacy",
+            establishment_kind=EstablishmentType.objects.get(pk="pharmacy"),
         )
-        self.payload = {
-            "establishment_id": self.e.pk,
-            "checklist_id": self.checklist.pk,
-            "inspected_on": date(2026, 11, 1),
-            "kind": "comprehensive",
-            "team_ids": [self.reader.pk],
-            "provider": "test",
-            "provider_form_id": "form1",
-            "submission_id": "sub1",
-            "mapping_version": "1",
-            "summary": {"overall_percent": 80},
-        }
         self.client = APIClient()
         self.client.force_authenticate(self.manager)
+
+    def upload(self, name="checklist.xlsx"):
+        return SimpleUploadedFile(
+            name,
+            b"test workbook",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
     def test_services_enforce_write_permissions(self):
         with self.assertRaises(PermissionDenied):
@@ -67,81 +49,39 @@ class WorkflowTests(TestCase):
                 self.reader,
                 {"name": "Unauthorized", "kind": "pharmacy", "province": "Kabul"},
             )
-        with self.assertRaises(PermissionDenied):
-            ingest_inspection(self.reader, self.payload)
-
-    def test_manual_link_preserves_source_details_and_name(self):
-        link = connect_source(
-            self.manager, self.e.pk, "archive", "archive-pharmacy-001"
-        )
-        self.e.refresh_from_db()
-        self.assertEqual(self.e.name, "First")
-        self.assertEqual(link.details["name"], "Shifa Demonstration")
-        self.assertTrue(link.is_demo)
-
-    def test_external_record_cannot_map_to_two_establishments(self):
-        connect_source(self.manager, self.e.pk, "archive", "archive-pharmacy-001")
-        with self.assertRaises(ValidationError):
-            connect_source(
-                self.manager, self.empty.pk, "archive", "archive-pharmacy-001"
-            )
-        self.assertEqual(SourceLink.objects.count(), 1)
-
-    def test_relink_and_unlink(self):
-        connect_source(self.manager, self.e.pk, "survey", "survey-pharmacy-001")
-        connect_source(self.manager, self.e.pk, "survey", "survey-pharmacy-002")
-        disconnect_source(self.manager, self.e.pk, "survey")
-        self.assertEqual(SourceLink.objects.count(), 0)
-
-    def test_ingestion_retry_is_idempotent_and_keeps_approval(self):
-        i = ingest_inspection(self.manager, self.payload)
-        approve_inspection(self.manager, i.pk)
-        retried = ingest_inspection(self.manager, self.payload)
-        self.assertTrue(retried.approved)
-        self.assertEqual(Inspection.objects.count(), 1)
-
-    def test_changed_submission_resets_approval(self):
-        i = ingest_inspection(self.manager, self.payload)
-        approve_inspection(self.manager, i.pk)
-        updated = ingest_inspection(
-            self.manager, dict(self.payload, summary={"overall_percent": 50})
-        )
-        self.assertFalse(updated.approved)
-        self.assertIsNone(updated.approved_by)
-        self.assertEqual(Inspection.objects.count(), 1)
 
     def test_checklist_requires_xlsform_upload(self):
         values = {
             "code": "new-pharmacy",
             "name": "New pharmacy checklist",
-            "version": "1",
-            "establishment_kind": "pharmacy",
+            "establishment_kind": EstablishmentType.objects.get(pk="pharmacy"),
         }
         with self.assertRaises(ValidationError):
             save_checklist(self.manager, values)
-        upload = SimpleUploadedFile(
-            "pharmacy-checklist.xlsx",
-            b"test workbook",
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        checklist = save_checklist(self.manager, {**values, "xlsform": upload})
+        checklist = save_checklist(self.manager, {**values, "xlsform": self.upload()})
         self.addCleanup(checklist.xlsform.delete, save=False)
         self.assertTrue(checklist.xlsform.name.endswith(".xlsx"))
 
+    def test_checklist_code_is_unique(self):
+        with self.assertRaises(ValidationError):
+            save_checklist(
+                self.manager,
+                {
+                    "code": "pharmacy",
+                    "name": "Duplicate",
+                    "establishment_kind": EstablishmentType.objects.get(pk="pharmacy"),
+                    "xlsform": self.upload(),
+                },
+            )
+
     def test_api_creates_and_updates_checklist_with_xlsform(self):
-        upload = SimpleUploadedFile(
-            "api-checklist.xlsx",
-            b"test workbook",
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
         response = self.client.post(
             "/api/v1/checklists/",
             {
                 "code": "api-pharmacy",
                 "name": "API pharmacy checklist",
-                "version": "1",
                 "establishment_kind": "pharmacy",
-                "xlsform": upload,
+                "xlsform": self.upload("api-checklist.xlsx"),
             },
             format="multipart",
         )
@@ -158,146 +98,70 @@ class WorkflowTests(TestCase):
         self.assertEqual(response.data["name"], "Updated API checklist")
         self.assertTrue(response.data["xlsform"])
 
-    def test_checklist_deployment_requires_permission_and_records_failure(self):
-        upload = SimpleUploadedFile(
-            "deploy-checklist.xlsx",
-            b"test workbook",
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+    def test_checklist_deployment_requires_permission(self):
         checklist = Checklist.objects.create(
             code="deploy-test",
             name="Deploy test",
-            version="1",
-            establishment_kind="pharmacy",
-            xlsform=upload,
+            establishment_kind=EstablishmentType.objects.get(pk="pharmacy"),
+            xlsform=self.upload("deploy-checklist.xlsx"),
         )
         self.addCleanup(checklist.xlsform.delete, save=False)
-
         with self.assertRaises(PermissionDenied):
             deploy_checklist(self.reader, checklist.pk)
 
-        with patch(
-            "apps.inspections.services.deploy_checklist_to_kobo",
-            side_effect=KoboError("KoBo rejected the form"),
-        ), self.assertRaises(ValidationError):
-            deploy_checklist(self.manager, checklist.pk)
-
-        checklist.refresh_from_db()
-        self.assertEqual(checklist.kobo_deployment_status, "failed")
-        self.assertIn("KoBo rejected the form", checklist.kobo_deployment_error)
-
-    def test_checklist_deployment_success_records_asset(self):
-        upload = SimpleUploadedFile(
-            "deploy-ok.xlsx",
-            b"test workbook",
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        checklist = Checklist.objects.create(
-            code="deploy-ok",
-            name="Deploy success",
-            version="1",
-            establishment_kind="pharmacy",
-            xlsform=upload,
-        )
-        self.addCleanup(checklist.xlsform.delete, save=False)
-        with patch(
-            "apps.inspections.services.deploy_checklist_to_kobo",
-            return_value=("asset-123", {"uid": "asset-123", "deployment_status": "deployed"}),
-        ):
-            result = deploy_checklist(self.manager, checklist.pk)
-
-        self.assertEqual(result.kobo_asset_uid, "asset-123")
-        self.assertEqual(result.kobo_deployment_status, "deployed")
-        self.assertIsNotNone(result.kobo_deployed_at)
-
-    def test_kobo_establishment_csv_exposes_stable_ids(self):
-        response = self.client.get("/api/v1/integrations/kobo/establishments.csv")
+    def test_establishment_csv_exposes_stable_ids(self):
+        response = self.client.get("/api/v1/integrations/establishments.csv")
         self.assertEqual(response.status_code, 200)
         text = response.content.decode()
-        self.assertIn("name,label,kind,province,district", text)
+        header = text.splitlines()[0]
+        for column in (
+            "name",
+            "label",
+            "kind",
+            "province",
+            "district",
+            "license_number",
+            "owner",
+            "technical_manager",
+        ):
+            self.assertIn(column, header.split(","))
         self.assertIn(str(self.e.pk), text)
 
-    def test_kobo_submission_sync_links_to_establishment(self):
-        self.checklist.kobo_asset_uid = "asset-test"
-        self.checklist.save(update_fields=["kobo_asset_uid"])
-        payload = [
-            {
-                "_id": 42,
-                "establishment_id": str(self.e.pk),
-                "_submission_time": "2026-11-01T10:00:00Z",
-                "question": "answer",
+    def test_establishment_csv_includes_licensing_details(self):
+        from apps.establishments.models import SourceLink
+
+        SourceLink.objects.create(
+            establishment=self.e,
+            source="licensing",
+            external_id="pharmacy:P-1",
+            linked_by=self.manager,
+            details={
+                "name": "First",
+                "address": "Main street",
+                "license_number": "LIC-1",
+                "license_expiry_date": "2027-01-01",
+                "grade": "A",
+                "owner": "Owner Name",
+                "owner_phone": "0700000000",
+                "technical_manager": "Manager Name",
+                "technical_staff_count": 2,
+                "activities": "Medicines",
             },
-            {
-                "_id": 43,
-                "establishment_id": "00000000-0000-0000-0000-000000000000",
-                "_submission_time": "2026-11-01T10:00:00Z",
-            },
-            {"_id": 44, "_submission_time": "2026-11-01T10:00:00Z"},
-        ]
-        asset = {
-            "uid": "asset-test",
-            "content": {
-                "survey": [
-                    {"name": "question", "type": "text", "label": ["Question"]}
-                ]
-            },
-        }
-        with (
-            patch("apps.integrations.services.fetch_submissions", return_value=payload),
-            patch("apps.integrations.services.get_asset", return_value=asset),
+        )
+        text = self.client.get("/api/v1/integrations/establishments.csv").content.decode()
+        row = next(
+            line for line in text.splitlines() if line.startswith(f"{self.e.pk},")
+        )
+        for value in (
+            "Main street",
+            "LIC-1",
+            "2027-01-01",
+            "Owner Name",
+            "0700000000",
+            "Manager Name",
+            "Medicines",
         ):
-            counts = sync_kobo_submissions(self.manager, self.e.pk)
-
-        self.assertEqual(counts, {"fetched": 3, "created": 1, "updated": 0, "skipped": 2})
-        submission = KoboSubmission.objects.get()
-        self.assertEqual(submission.establishment, self.e)
-        self.assertEqual(submission.submission_id, "42")
-        self.assertEqual(submission.data["question"], "answer")
-        self.assertEqual(submission.form_schema["labels"]["question"], "Question")
-
-    def test_checklist_applicability_and_team_validation(self):
-        c = Checklist.objects.create(
-            code="factory", version="1", name="Factory", establishment_kind="factory"
-        )
-        with self.assertRaises(ValidationError):
-            ingest_inspection(self.manager, dict(self.payload, checklist_id=c.pk))
-        with self.assertRaises(ValidationError):
-            ingest_inspection(self.manager, dict(self.payload, team_ids=[999999]))
-
-    def test_approval_is_permission_protected_and_repeat_safe(self):
-        i = ingest_inspection(self.manager, self.payload)
-        with self.assertRaises(PermissionDenied):
-            approve_inspection(self.reader, i.pk)
-        approve_inspection(self.manager, i.pk)
-        approve_inspection(self.manager, i.pk)
-        self.assertEqual(
-            Inspection.objects.filter(approved=True, approved_by=self.manager).count(),
-            1,
-        )
-
-    def test_coverage_counts_establishments_not_visits(self):
-        i = ingest_inspection(self.manager, self.payload)
-        approve_inspection(self.manager, i.pk)
-        ingest_inspection(
-            self.manager, dict(self.payload, submission_id="sub2", kind="follow_up")
-        )
-        report = coverage(self.manager, {})
-        self.assertEqual(
-            report,
-            {
-                "establishments": 2,
-                "inspected": 1,
-                "uninspected": 1,
-                "visits": 2,
-                "approved": 1,
-                "unapproved": 1,
-                "coverage_percent": 50.0,
-            },
-        )
-        self.assertEqual(coverage(self.manager, {"approved": "false"})["visits"], 1)
-        self.assertEqual(
-            coverage(self.manager, {"date_from": date(2027, 1, 1)})["uninspected"], 2
-        )
+            self.assertIn(value, row)
 
     def test_api_rejects_unauthenticated_and_unauthorized_actions(self):
         self.client.force_authenticate(None)
@@ -311,47 +175,60 @@ class WorkflowTests(TestCase):
             403,
         )
 
-    def test_api_validates_filters(self):
+    def test_api_validates_submission_filters(self):
         self.assertEqual(
-            self.client.get("/api/v1/inspections/?date_from=invalid").status_code, 400
+            self.client.get("/api/v1/submissions/?date_from=invalid").status_code, 400
         )
         self.assertEqual(
-            self.client.get(
-                "/api/v1/inspections/?establishment_id=invalid"
-            ).status_code,
+            self.client.get("/api/v1/submissions/?establishment_id=invalid").status_code,
             400,
         )
         self.assertEqual(
             self.client.get(
-                "/api/v1/reports/coverage/?date_from=2026-11-10&date_to=2026-11-01"
+                "/api/v1/submissions/?date_from=2026-11-10&date_to=2026-11-01"
             ).status_code,
             400,
         )
+
+    def test_api_lists_and_filters_submissions(self):
+        deployment = FormDeployment.objects.create(
+            checklist=self.checklist,
+            provider="odk",
+            project_id="1",
+            form_id="mandi_checklist_1",
+            status="deployed",
+        )
+        for index in range(2):
+            CollectionSubmission.objects.create(
+                deployment=deployment,
+                submission_id=f"s{index}",
+                establishment=self.e,
+                form_version="v1",
+            )
+        response = self.client.get("/api/v1/submissions/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 2)
+        response = self.client.get(
+            "/api/v1/submissions/", {"establishment_kind": "pharmacy"}
+        )
+        self.assertEqual(response.data["count"], 2)
+        response = self.client.get("/api/v1/submissions/", {"establishment_kind": "factory"})
+        self.assertEqual(response.data["count"], 0)
+        response = self.client.get(
+            "/api/v1/submissions/", {"checklist_id": self.checklist.pk}
+        )
+        self.assertEqual(response.data["count"], 2)
 
     def test_api_honours_cms_page_size_contract(self):
         for index in range(3):
             save_establishment(
                 self.manager,
-                {
-                    "name": f"Page {index}",
-                    "kind": "pharmacy",
-                    "province": "Kabul",
-                },
+                {"name": f"Page {index}", "kind": "pharmacy", "province": "Kabul"},
             )
         response = self.client.get("/api/v1/establishments/", {"page_size": 2})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["results"]), 2)
         self.assertEqual(response.data["count"], 5)
-
-    def test_api_establishment_and_inspection_detail(self):
-        i = ingest_inspection(self.manager, self.payload)
-        self.assertEqual(
-            self.client.get(f"/api/v1/establishments/{self.e.pk}/").status_code, 200
-        )
-        response = self.client.get(f"/api/v1/inspections/{i.pk}/")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["team"][0]["id"], self.reader.pk)
-        self.assertEqual(response.data["checklist"]["version"], "1")
 
     def test_choices_carry_stable_ids(self):
         response = self.client.get(
@@ -374,42 +251,44 @@ class WorkflowTests(TestCase):
         self.assertEqual(self.client.post("/api/v1/auth/logout/").status_code, 204)
         self.assertEqual(self.client.get("/api/v1/auth/me/").status_code, 401)
 
-    @override_settings(DEMO_INTEGRATIONS=False)
-    def test_demo_sources_disabled_explicitly(self):
+    def test_unconfigured_source_is_rejected(self):
         with self.assertRaises(ValidationError):
             connect_source(self.manager, self.e.pk, "survey", "survey-pharmacy-001")
 
-    def test_category_change_preserves_inspection_history(self):
-        ingest_inspection(self.manager, self.payload)
+    def test_establishment_types_can_be_managed(self):
+        created = self.client.post(
+            "/api/v1/establishment-types/",
+            {"code": "laboratory", "name": "Laboratory"},
+        )
+        self.assertEqual(created.status_code, 201)
+        updated = self.client.patch(
+            "/api/v1/establishment-types/laboratory/", {"is_active": False}
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertFalse(updated.data["is_active"])
+        listing = self.client.get("/api/v1/establishment-types/")
+        self.assertIn("laboratory", [item["code"] for item in listing.data])
+
+    def test_category_change_preserves_submission_history(self):
+        FormDeployment.objects.create(
+            checklist=self.checklist,
+            provider="odk",
+            project_id="1",
+            form_id="mandi_checklist_1",
+            status="deployed",
+        )
+        CollectionSubmission.objects.create(
+            deployment=FormDeployment.objects.get(),
+            submission_id="s1",
+            establishment=self.e,
+        )
         with self.assertRaises(ValidationError):
             save_establishment(self.manager, {"kind": "factory"}, self.e.pk)
 
-    def test_summary_and_schema_contract(self):
-        response = self.client.post(
-            "/api/v1/integrations/ingest/",
-            dict(
-                self.payload,
-                establishment_id=str(self.e.pk),
-                inspected_on="2026-11-01",
-                summary={"findings": [{"issue": "Storage", "deadline": "2026-12-01"}]},
-            ),
-            format="json",
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.data["summary"]["findings"][0]["deadline"], "2026-12-01"
-        )
-        invalid = self.client.post(
-            "/api/v1/integrations/ingest/",
-            dict(
-                self.payload,
-                establishment_id=str(self.e.pk),
-                inspected_on="2026-11-01",
-                summary={"sections": [{"name": "Storage", "earned": 6, "possible": 5}]},
-            ),
-            format="json",
-        )
-        self.assertEqual(invalid.status_code, 400)
+    def test_schema_lists_submissions_and_not_inspections(self):
         response = self.client.get("/api/v1/schema/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("/integrations/ingest/", response.data["paths"])
+        self.assertIn("/submissions/", response.data["paths"])
+        self.assertIn("/checklists/{pk}/versions/", response.data["paths"])
+        self.assertNotIn("/integrations/ingest/", response.data["paths"])
+        self.assertNotIn("/inspections/", response.data["paths"])

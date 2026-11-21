@@ -6,7 +6,6 @@ import { Link, useParams } from "react-router";
 import { AppErrorState } from "@/components/public/AppErrorState";
 import { AppLoader } from "@/components/public/AppLoader";
 import AppTitle from "@/components/public/AppTitle";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApiQuery } from "@/features/shared/api";
 import { errorMessage } from "@/lib/api";
@@ -47,7 +46,6 @@ export default function SourceDetailPage() {
           "Details are loaded from the linked source. Mandi establishment details remain separate.",
         )}
       </p>
-      {data.is_demo && <Badge variant="secondary">{t("Demonstration data")}</Badge>}
       <SourceDetails data={data} />
     </div>
   );

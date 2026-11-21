@@ -26,6 +26,7 @@ export function EmployeeAccess({ employee }: { employee: EmployeeRecord }) {
   const [allowed, setAllowed] = useState(employee.allowed_checklists);
   const [checklist, setChecklist] = useState("");
   const [credential, setCredential] = useState("");
+  const [qrCode, setQrCode] = useState("");
   const permissionGroups = useQuery({
     queryKey: ["permission-groups"],
     queryFn: async () =>
@@ -69,12 +70,14 @@ export function EmployeeAccess({ employee }: { employee: EmployeeRecord }) {
   const provision = useMutation({
     mutationFn: async () =>
       (
-        await api.post<{ server_url: string }>(`/employees/${employee.id}/collection-access/`, {
-          checklist_id: Number(checklist),
-        })
+        await api.post<{ server_url: string; qr?: string }>(
+          `/employees/${employee.id}/collection-access/`,
+          { checklist_id: Number(checklist) },
+        )
       ).data,
     onSuccess: (data) => {
       setCredential(data.server_url);
+      setQrCode(data.qr ?? "");
       refresh();
     },
   });
@@ -83,6 +86,7 @@ export function EmployeeAccess({ employee }: { employee: EmployeeRecord }) {
       api.delete(`/employees/${employee.id}/collection-access/`, { data: { grant_id: id } }),
     onSuccess: () => {
       setCredential("");
+      setQrCode("");
       refresh();
     },
   });
@@ -188,16 +192,29 @@ export function EmployeeAccess({ employee }: { employee: EmployeeRecord }) {
       {credential && (
         <div className="space-y-2">
           <p>
-            Copy this private server URL into ODK Collect now. It is shown only here and is not
-            stored by Mandi.
+            Scan this QR in ODK Collect (Add project → Scan QR code), or copy the server URL. It is
+            shown only here and Mandi does not store the token.
           </p>
+          {qrCode ? (
+            <img
+              src={qrCode}
+              alt="ODK Collect settings QR code"
+              className="mx-auto max-w-56 rounded border bg-white p-2"
+            />
+          ) : null}
           <textarea
             aria-label="ODK Collect server URL"
             readOnly
             className="w-full rounded border p-2 break-all"
             value={credential}
           />
-          <Button variant="outline" onClick={() => setCredential("")}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setCredential("");
+              setQrCode("");
+            }}
+          >
             Hide credential
           </Button>
         </div>

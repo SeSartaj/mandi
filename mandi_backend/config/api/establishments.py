@@ -97,9 +97,10 @@ class Choices(APIView):
         )
 
 
-class KoboEstablishmentsCsv(APIView):
+class EstablishmentsCsv(APIView):
     def get(self, request):
-        accounts.require(request.user, "establishments.view_establishment")
+        # The CSV includes Licensing contact details used by deployed forms.
+        accounts.require(request.user, "inspections.deploy_checklist")
         response = HttpResponse(
             establishments.establishment_choice_csv(),
             content_type="text/csv; charset=utf-8",
@@ -149,10 +150,15 @@ class RegistryCatalog(APIView):
             system["searchable"] = bool(
                 (system["adapter"] == "registration" and settings.REGISTRATION_BASE_URL and settings.REGISTRATION_API_KEY)
                 or (system["adapter"] == "licensing" and licensing.configured())
-                or (system["adapter"] not in {"registration", "licensing"} and system["adapter"] in ADAPTERS)
-                or (settings.DEMO_INTEGRATIONS and code in {"licensing", "survey", "archive"}))
+                or (system["adapter"] not in {"registration", "licensing"} and system["adapter"] in ADAPTERS))
         systems.sort(key=lambda item: (item["code"] not in {"registration", "licensing"}, item["name"]))
-        return Response({"types": list(EstablishmentType.objects.filter(is_active=True).values("code", "name")), "systems": systems})
+        from apps.core.models import District, Province
+        return Response({
+            "types": list(EstablishmentType.objects.filter(is_active=True).values("code", "name")),
+            "systems": systems,
+            "provinces": list(Province.objects.filter(is_active=True).values("id", "name", "name_local")),
+            "districts": list(District.objects.filter(is_active=True).values("id", "name", "name_local", "province_id")),
+        })
 
 
 class RegistrySyncStatus(APIView):
