@@ -74,6 +74,54 @@ export type Employee = {
   restrict_checklist_access: boolean;
   allowed_checklists: number[];
 };
+export type EmployeeGroupInfo = {
+  id: number;
+  name: string;
+  permissions: string[];
+};
+export type EmployeeChecklistInfo = {
+  id: number;
+  code: string;
+  name: string;
+};
+export type EmployeeDetail = Employee & {
+  is_superuser: boolean;
+  date_joined: string;
+  last_login: string | null;
+  groups_info: EmployeeGroupInfo[];
+  allowed_checklists_info: EmployeeChecklistInfo[];
+};
+export type GrantSummary = {
+  grant_id: number;
+  checklist_id: number;
+  checklist_name: string;
+};
+export type CollectorCredential = {
+  project_id: number;
+  project_name?: string | null;
+  remote_id: string;
+  checklists: GrantSummary[];
+};
+export type NewCollectorCredential = CollectorCredential & {
+  server_url: string;
+  qr?: string;
+  message?: string;
+};
+export type ProvisionResult = {
+  credentials: NewCollectorCredential[];
+  added: GrantSummary[];
+  unchanged: GrantSummary[];
+};
+export type CollectionProject = {
+  id: number;
+  name: string;
+  archived: boolean;
+};
+export type CollectionProjectDirectory = {
+  available: boolean;
+  projects: CollectionProject[];
+  error: string;
+};
 export type Session = { user: Employee; permissions: string[] };
 export type Page<T> = { count: number; next: string | null; previous: string | null; results: T[] };
 export type Establishment = {
@@ -118,7 +166,6 @@ export type Checklist = {
   id: number;
   code: string;
   name: string;
-  establishment_kind: string;
   xlsform: string | null;
   collection: {
     provider: string;
@@ -129,7 +176,6 @@ export type Checklist = {
     deployed_at: string | null;
     url: string | null;
   };
-  allows_all_types: boolean;
   submission_count?: number;
   created_at: string;
   updated_at: string;
@@ -176,9 +222,9 @@ export type Submission = {
   id: number;
   asset_uid: string;
   submission_id: string;
-  establishment_id: string;
+  establishment_id: string | null;
   establishment_name: string | null;
-  establishment_kind: string;
+  establishment_kind: string | null;
   checklist_id: number | null;
   checklist_name: string | null;
   form_version: string;

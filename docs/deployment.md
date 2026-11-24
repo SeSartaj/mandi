@@ -1,10 +1,11 @@
 # Deploy Mandi and ODK Central on Ubuntu
 
 Mandi owns employee accounts, permissions, establishments, XLSForm originals,
-inspection summaries, approval, and reporting. Central owns form execution,
-offline collection credentials, raw submissions, and attachments. They communicate
-only over Central's authenticated HTTP API. Neither application reads the other's
-database. An outage of Central does not prevent Mandi login or reporting.
+checklist metadata, submission history, and external source mappings. Central owns
+form execution, offline collection credentials, raw submissions, and attachments.
+They communicate only over Central's authenticated HTTP API. Neither application
+reads the other's database. An outage of Central does not prevent Mandi login or
+access to stored records.
 
 `compose.yml` is the only stack definition. It runs both applications in one
 Compose project: Mandi (PostgreSQL, Django, React, collection and registry sync workers, Caddy)
@@ -130,25 +131,26 @@ images only after verifying backups and which releases you want to retain.
 ## Forms and employees
 
 1. Create establishments in Mandi.
-2. Upload an `.xlsx` or `.xls` XLSForm in **Checklists**, choose its establishment
-   kind, and deploy. Mandi keeps the original and sends Central a prepared copy.
-   Each checklist gets a stable `mandi_<checklist-id>` Central form ID and each
-   publish gets a unique XLSForm version. Mandi's checklist version remains your
-   business version. Changing field types may require a new checklist/version,
-   because Central enforces compatibility with previously published forms.
-3. Mandi inserts a required root `establishment_id` selector if missing and uploads
-   `establishments.csv` filtered to that checklist's establishment kind. It is a
-   **snapshot**: redeploy after establishments change, then refresh downloaded
-   forms on devices. Existing custom `establishment_id` questions are preserved;
-   ensure they submit the Mandi UUID, not an establishment name.
+2. Upload an `.xlsx` or `.xls` XLSForm in **Checklists** and deploy. Mandi keeps
+   the original and sends Central a prepared copy. Each checklist gets a stable
+   `mandi_<checklist-id>` Central form ID and each publish gets a unique XLSForm
+   version. Changing field types may require a new checklist, because Central
+   enforces compatibility with previously published forms.
+3. Mandi inserts a required root `establishment_id` selector if missing, creates
+   or reconciles the project's `establishments` Entity List, and links it to the
+   form before publishing. Keep the Entity List current with the entity sync
+   worker; changes reach devices on their next form update without redeploying
+   the form. Existing custom `establishment_id` questions are preserved; ensure
+   they submit the ODK Entity UUID, not an establishment name.
 4. Create an employee, assign Mandi permission groups, and use **Manage** to edit
    their name/position, reset passwords, change groups, deactivate accounts, and
    limit access to selected checklists.
-5. In **Manage → ODK Collect access**, choose a deployed checklist and create a
-   credential. Copy its private server URL into ODK Collect's server settings.
-   The credential is displayed once and is not stored by Mandi. Each credential
-   grants one form; use a separate Collect project for each credential/checklist.
-   Forms can be downloaded for offline collection and submitted when online.
+5. In **Manage → ODK Collect access**, select one or more deployed checklists and
+   create a credential. Checklists in the same ODK project share one credential;
+   selecting checklists from different projects creates one credential per
+   project. Copy each private server URL into ODK Collect's server settings.
+   Credentials are displayed once and are not stored by Mandi. Forms can be
+   downloaded for offline collection and submitted when online.
 6. Revoke credentials in Mandi before deactivating an employee or narrowing their
    checklist access. Failed revocation leaves the grant active and reports the
    error so it can be retried. This avoids claiming a disabled Mandi account has
@@ -157,35 +159,29 @@ images only after verifying backups and which releases you want to retain.
    cannot be remotely erased by revoking server access.
 
 The sync worker uses the initial Mandi administrator by default. Set
-`MANDI_SYNC_USERNAME` to an active employee with the required inspection and
+`MANDI_SYNC_USERNAME` to an active employee with the required checklist and
 establishment permissions to use a separate account.
 
 The sync worker retries outages every `COLLECTION_SYNC_INTERVAL` seconds
-(default 60). **Sync submissions** also imports immediately. A recognized Central
-submitter actor maps to the employee provisioned through Mandi. Imported raw
-records are deduplicated by provider deployment and submission ID, and mapped
-inspection summaries appear in coverage/review. Repeat syncs preserve approval;
-changed submission content clears approval. Attachments are fetched on demand
-through Mandi's authenticated endpoint, never public media URLs.
+(default 60). **Sync submissions** also imports immediately. Imported records are
+deduplicated by provider deployment and submission ID; an unchanged retry keeps
+the existing record, and changed content updates it. Attachments are fetched on
+demand through Mandi's authenticated endpoint, never public media URLs.
 
-Mapping contract: `establishment_id` is a Mandi establishment UUID;
-`inspected_on` is an ISO date (falls back to Central submission date);
-`inspection_kind` is `comprehensive`, `brief`, `follow_up`, or `special` (defaults
-to `comprehensive`). `result_pct` is the overall percentage; existing `score_*`,
-`max_*`, and `pct_*` calculations render in the submission viewer. The submitter
-is recorded as the inspection team member. For multi-person teams add an
-explicit provider mapping. Unknown submitters are retained as submissions but
-are not assigned invented inspectors or counted as inspection visits. Sync
-counts/logs expose `unmapped_inspectors` and skipped invalid establishments/dates.
-Central-created collectors should be replaced/provisioned through Mandi for
-reporting. Encrypted submissions and repeat-table OData expansion are not yet
-mapped into inspection summaries; their original records remain in Central.
+Mapping contract: `establishment_id` is the ODK Entity UUID selected from the
+project's Entity List. Mandi resolves it through the project-scoped
+`EntityBinding`, so the same establishment can be used in multiple Central
+projects without UUID collisions. Existing `score_*`, `max_*`, `pct_*`, and
+`title_*` calculations render in the submission viewer. Central-created
+collectors should be provisioned through Mandi so their checklist access is
+managed in one place. Encrypted submissions and repeat-table OData expansion are
+not yet mapped; their original records remain in Central.
 
 An interrupted deployment claim can be retried after 15 minutes. Publishing uses
 Central's draft → attachment → publish sequence, so a failed upload does not
 replace the published form with an incomplete draft. Forms with other required
 media files need those files supplied in Central before publishing; Mandi
-currently manages the workbook and `establishments.csv` attachment.
+currently manages the workbook and the `establishments.csv` Entity List link.
 
 ## Provider boundary
 
@@ -195,12 +191,11 @@ attachment streaming, form links, collector provisioning, and revocation. `colle
 Mandi workflows. `FormDeployment`, `CollectionSubmission`, and `CollectorGrant`
 store remote references independently of the checklist and Mandi user models.
 To add another XLSForm service, implement/register an adapter in `COLLECTION_ADAPTERS`, provide its
-configuration, and map its submission metadata to the normalized inspection
-contract. Core establishments, users, approvals, and reports do not change.
+configuration, and map its submission metadata to the normalized submission
+contract. Core establishments, users, and submissions do not change.
 
 Provider selection is an adapter choice, not automatic migration between
-providers. Core establishments, users, approvals, and reports do not change when
-another XLSForm service is added.
+providers.
 
 ## Backups and recovery
 

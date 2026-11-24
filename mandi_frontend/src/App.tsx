@@ -20,6 +20,7 @@ const ChecklistsPage = lazy(() => import("@/features/checklists/ChecklistsPage")
 const ChecklistDetailPage = lazy(() => import("@/features/checklists/ChecklistDetailPage"));
 const SubmissionDetailPage = lazy(() => import("@/features/checklists/SubmissionDetailPage"));
 const DashboardPage = lazy(() => import("@/features/dashboard/DashboardPage"));
+const EmployeeDetailPage = lazy(() => import("@/features/employees/EmployeeDetailPage"));
 const EmployeesPage = lazy(() => import("@/features/employees/EmployeesPage"));
 const EstablishmentDetailPage = lazy(
   () => import("@/features/establishments/EstablishmentDetailPage"),
@@ -176,6 +177,14 @@ export default function App() {
             element={
               <Can permission="accounts.view_user" fallback={<PermissionDenied />}>
                 <EmployeesPage />
+              </Can>
+            }
+          />
+          <Route
+            path="/employees/:id"
+            element={
+              <Can permission="accounts.view_user" fallback={<PermissionDenied />}>
+                <EmployeeDetailPage />
               </Can>
             }
           />

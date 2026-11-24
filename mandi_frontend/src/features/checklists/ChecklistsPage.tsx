@@ -18,7 +18,6 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 import ChecklistForm from "@/features/checklists/ChecklistForm";
 import OdkProjectsDialog from "@/features/checklists/OdkProjectsDialog";
 import { useApiQuery } from "@/features/shared/api";
-import { choiceLabel } from "@/features/shared/labels";
 import type { Checklist, OdkProject } from "@/lib/api";
 import { api, errorMessage } from "@/lib/api";
 
@@ -144,12 +143,11 @@ export default function ChecklistsPage() {
             onRetry={() => checklists.refetch()}
           />
         ) : (
-          <AppTable className="min-w-[900px]">
+          <AppTable className="min-w-[780px]">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("Name")}</TableHead>
                 <TableHead>{t("Checklist code")}</TableHead>
-                <TableHead>{t("Type")}</TableHead>
                 <TableHead>{t("XLSForm")}</TableHead>
                 <TableHead>{t("Deployment")}</TableHead>
                 <TableHead>{t("Action")}</TableHead>
@@ -164,7 +162,6 @@ export default function ChecklistsPage() {
                     </Link>
                   </TableCell>
                   <TableCell>{checklist.code}</TableCell>
-                  <TableCell>{t(choiceLabel(checklist.establishment_kind))}</TableCell>
                   <TableCell>
                     {checklist.xlsform ? (
                       <a

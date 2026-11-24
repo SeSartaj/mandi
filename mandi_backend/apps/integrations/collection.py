@@ -1,12 +1,12 @@
 """Provider-neutral collection workflows; all business records live in Mandi."""
 
 import io
+from collections import defaultdict
 from datetime import timedelta
 from pathlib import Path
 from zipfile import BadZipFile
 
 from django.conf import settings
-from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -14,10 +14,9 @@ from openpyxl import load_workbook
 from rest_framework.exceptions import APIException, ValidationError
 
 from apps.accounts.services import require, require_checklist_access, scope_checklists
-from apps.establishments.models import Establishment
-from apps.establishments.services import establishment_choice_csv
 from apps.inspections.models import Checklist
 
+from .entities import ensure_dataset, establishment_for_entity, sync_entities
 from .models import CollectionSubmission, CollectorGrant, FormDeployment
 from .providers import CollectionError, provider
 from .submissions import form_schema
@@ -25,7 +24,6 @@ from .xlsform import (
     XlsFormError,
     add_establishment_question,
     set_form_title,
-    uses_establishment_type_filter,
 )
 
 
@@ -81,7 +79,6 @@ def deploy(actor, pk, project_id=None, force=False):
         raise ValidationError(
             "This checklist is already deploying. Retry after it finishes."
         )
-    all_types = False
     try:
         with checklist.xlsform.open("rb") as source:
             content, _ = add_establishment_question(
@@ -118,18 +115,29 @@ def deploy(actor, pk, project_id=None, force=False):
                         "",
                     )
         deployment.schema = form_schema(asset)
-        all_types = uses_establishment_type_filter(workbook)
+        has_establishment = any(
+            node.get("name") == "establishment_id"
+            for node in asset["content"].get("survey", [])
+        )
+        dataset = None
+        if has_establishment:
+            dataset = ensure_dataset(project)
+            # A form that links an incomplete list would give wrong choices.
+            entity_counts = sync_entities(project, dataset)
+            if entity_counts["failed"]:
+                raise CollectionError(
+                    "Could not sync all establishments to the Entity List."
+                )
         output = io.BytesIO()
         workbook.save(output)
         workbook.close()
         provider(deployment.provider).deploy(
             deployment,
             output.getvalue(),
-            establishment_choice_csv()
-            if all_types
-            else establishment_choice_csv(kind=checklist.establishment_kind_id),
             force=force,
+            dataset=dataset,
         )
+        deployment.entity_list = dataset or ""
     except (CollectionError, XlsFormError, ValueError, OSError, BadZipFile) as exc:
         FormDeployment.objects.filter(pk=deployment.pk).update(
             status="failed", error=str(exc)
@@ -149,9 +157,6 @@ def deploy(actor, pk, project_id=None, force=False):
     deployment.error = ""
     deployment.deployed_at = timezone.now()
     deployment.save()
-    if checklist.allows_all_types != all_types:
-        checklist.allows_all_types = all_types
-        checklist.save(update_fields=["allows_all_types"])
     return checklist
 
 
@@ -221,23 +226,39 @@ def sync(actor, checklist_id=None):
                 if not identity:
                     counts["skipped"] += 1
                     continue
-                try:
-                    establishment = Establishment.objects.get(
-                        pk=remote.establishment_id
+                establishment = None
+                if remote.establishment_id:
+                    establishment = establishment_for_entity(
+                        deployment.project_id, remote.establishment_id
                     )
-                except (
-                    Establishment.DoesNotExist,
-                    ValueError,
-                    DjangoValidationError,
-                    TypeError,
-                ):
-                    counts["skipped"] += 1
-                    continue
+                    if establishment is None:
+                        counts["skipped"] += 1
+                        continue
                 _submission, created = CollectionSubmission.objects.update_or_create(
                     deployment=deployment,
                     submission_id=identity,
                     defaults={
                         "establishment": establishment,
+                        "establishment_snapshot": (
+                            {
+                                "id": str(establishment.pk),
+                                "name": establishment.name,
+                                "kind": establishment.kind_id,
+                                "province": (
+                                    establishment.province.name
+                                    if establishment.province
+                                    else ""
+                                ),
+                                "district": (
+                                    establishment.district.name
+                                    if establishment.district
+                                    else ""
+                                ),
+                                "address": establishment.address,
+                            }
+                            if establishment
+                            else {}
+                        ),
                         "data": remote.data,
                         "submitted_at": remote.submitted_at,
                         "form_version": remote.form_version,
@@ -250,43 +271,157 @@ def sync(actor, checklist_id=None):
 
 
 @transaction.atomic
-def provision(actor, user, checklist_id):
-    require(actor, "accounts.change_user")
-    require_checklist_access(actor, checklist_id)
+def provision(actor, user, checklist_ids):
+    if isinstance(checklist_ids, int):
+        checklist_ids = [checklist_ids]
+    checklist_ids = sorted({int(checklist_id) for checklist_id in checklist_ids})
+    if not checklist_ids:
+        raise ValidationError("Select at least one checklist.")
+    for checklist_id in checklist_ids:
+        require_checklist_access(actor, checklist_id)
     user = type(user).objects.select_for_update().get(pk=user.pk)
-    require_checklist_access(user, checklist_id)
     if not user.is_active:
         raise ValidationError(
             "Activate the employee before provisioning collection access."
         )
-    deployment = FormDeployment.objects.get(
-        checklist_id=checklist_id,
-        provider=settings.COLLECTION_PROVIDER,
-        status="deployed",
-    )
-    if CollectorGrant.objects.filter(
-        user=user, deployment=deployment, active=True
-    ).exists():
-        raise ValidationError(
-            "Revoke the existing collector before issuing new credentials."
+    deployments = list(
+        FormDeployment.objects.filter(
+            checklist_id__in=checklist_ids,
+            provider=settings.COLLECTION_PROVIDER,
+            status="deployed",
         )
-    remote = provider(deployment.provider).provision_collector(
-        deployment, user.display_name or user.username
+        .select_related("checklist")
+        .order_by("project_id", "checklist_id")
     )
-    grant = CollectorGrant(user=user, deployment=deployment, remote_id=remote["id"])
-    try:
-        with transaction.atomic():
-            grant.save()
-    except Exception:
-        provider(deployment.provider).revoke_collector(grant)
-        raise
-    return {"id": grant.pk, **remote["configuration"]}
+    if {deployment.checklist_id for deployment in deployments} != set(checklist_ids):
+        raise ValidationError("Deploy all selected checklists first.")
+    for deployment in deployments:
+        require_checklist_access(user, deployment.checklist_id)
+
+    by_project = defaultdict(list)
+    for deployment in deployments:
+        by_project[str(deployment.project_id)].append(deployment)
+    existing = CollectorGrant.objects.filter(
+        user=user,
+        active=True,
+        deployment__project_id__in=by_project,
+    ).select_related("deployment__checklist")
+    existing_by_project = defaultdict(list)
+    for grant in existing:
+        existing_by_project[str(grant.deployment.project_id)].append(grant)
+
+    credentials = []
+    added = []
+    unchanged = []
+    for project_id, project_deployments in by_project.items():
+        grants = existing_by_project.get(project_id, [])
+        remote_ids = {grant.remote_id for grant in grants}
+        if len(remote_ids) > 1:
+            raise ValidationError(
+                "This employee has multiple active credentials for one ODK "
+                "project. Revoke them before creating new access."
+            )
+        granted = {grant.deployment_id: grant for grant in grants}
+        new_deployments = [
+            deployment
+            for deployment in project_deployments
+            if deployment.pk not in granted
+        ]
+        unchanged.extend(
+            _grant_summary(grant)
+            for deployment in project_deployments
+            if (grant := granted.get(deployment.pk)) is not None
+        )
+        if not new_deployments:
+            continue
+
+        adapter = provider(project_deployments[0].provider)
+        remote_id = next(iter(remote_ids), None)
+        if remote_id is not None:
+            assigned = []
+            try:
+                for deployment in new_deployments:
+                    adapter.assign_collector(deployment, remote_id)
+                    assigned.append(deployment)
+                created = _create_grants(user, new_deployments, remote_id)
+            except Exception:
+                for deployment in assigned:
+                    try:
+                        adapter.unassign_collector(deployment, remote_id)
+                    except CollectionError:
+                        pass
+                raise
+            added.extend(_grant_summary(grant) for grant in created)
+            continue
+
+        remote = adapter.create_collector(
+            project_id, user.display_name or user.username
+        )
+        remote_id = remote["id"]
+        assigned = []
+        try:
+            for deployment in new_deployments:
+                adapter.assign_collector(deployment, remote_id)
+                assigned.append(deployment)
+            created = _create_grants(user, new_deployments, remote_id)
+        except Exception:
+            for deployment in assigned:
+                try:
+                    adapter.unassign_collector(deployment, remote_id)
+                except CollectionError:
+                    pass
+            try:
+                adapter.delete_collector(project_id, remote_id)
+            except CollectionError:
+                pass
+            raise
+        credentials.append(
+            {
+                "project_id": int(project_id),
+                "remote_id": remote_id,
+                **adapter.collector_configuration(project_id, remote["token"]),
+                "checklists": [_grant_summary(grant) for grant in created],
+            }
+        )
+    return {"credentials": credentials, "added": added, "unchanged": unchanged}
+
+
+def _grant_summary(grant):
+    return {
+        "grant_id": grant.pk,
+        "checklist_id": grant.deployment.checklist_id,
+        "checklist_name": grant.deployment.checklist.name,
+    }
+
+
+def _create_grants(user, deployments, remote_id):
+    return [
+        CollectorGrant.objects.create(
+            user=user, deployment=deployment, remote_id=remote_id
+        )
+        for deployment in deployments
+    ]
 
 
 def revoke(actor, grant):
     require(actor, "accounts.change_user")
     require_checklist_access(actor, grant.deployment.checklist_id)
-    if grant.active:
-        provider(grant.deployment.provider).revoke_collector(grant)
-        grant.active = False
-        grant.save(update_fields=["active"])
+    if not grant.active:
+        return
+    adapter = provider(grant.deployment.provider)
+    shared = (
+        CollectorGrant.objects.filter(
+            user=grant.user,
+            active=True,
+            remote_id=grant.remote_id,
+            deployment__project_id=grant.deployment.project_id,
+        )
+        .exclude(pk=grant.pk)
+        .exists()
+    )
+    if shared:
+        adapter.unassign_collector(grant.deployment, grant.remote_id)
+    else:
+        adapter.delete_collector(grant.deployment.project_id, grant.remote_id)
+    grant.active = False
+    grant.save(update_fields=["active"])

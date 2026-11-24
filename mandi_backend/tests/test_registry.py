@@ -35,7 +35,6 @@ class RegistryTests(TestCase):
         Checklist.objects.create(
             code="registry",
             name="Registry checklist",
-            establishment_kind=EstablishmentType.objects.get(pk="pharmacy"),
         )
 
     def test_native_attributes_and_custom_types(self):
@@ -44,10 +43,10 @@ class RegistryTests(TestCase):
         self.assertIn(b"Laboratory", establishment_choice_csv(kind="laboratory"))
         result = self.client.get("/api/v1/registry/")
         self.assertIn({"code": "laboratory", "name": "Laboratory"}, result.data["types"])
-        checklist = Checklist(name="Lab", code="lab", establishment_kind=EstablishmentType.objects.get(pk="laboratory"))
+        checklist = Checklist(name="Lab", code="lab")
         checklist.full_clean()
         checklist.save()
-        self.assertEqual(checklist.establishment_kind_id, "laboratory")
+        self.assertEqual(checklist.code, "lab")
 
     def test_invalid_type_or_attributes_rejected(self):
         for extra in [{"kind": "invalid"}]:

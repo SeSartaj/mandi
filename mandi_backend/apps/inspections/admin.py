@@ -7,6 +7,5 @@ from .models import Checklist
 
 @admin.register(Checklist)
 class ChecklistAdmin(AuditFieldsAdminMixin, admin.ModelAdmin):
-    list_display = ("code", "name", "establishment_kind", "allows_all_types")
-    list_filter = ("establishment_kind", "allows_all_types")
+    list_display = ("code", "name")
     search_fields = ("code", "name")

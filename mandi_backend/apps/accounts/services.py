@@ -38,6 +38,18 @@ def employees(actor):
     return get_user_model().objects.order_by("display_name", "username")
 
 
+def get_employee(actor, pk):
+    require(actor, "accounts.view_user")
+    from django.shortcuts import get_object_or_404
+
+    return get_object_or_404(
+        get_user_model().objects.prefetch_related(
+            "groups__permissions__content_type", "allowed_checklists"
+        ),
+        pk=pk,
+    )
+
+
 @transaction.atomic
 def create_employee(actor, data):
     require(actor, "accounts.add_user")

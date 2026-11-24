@@ -139,7 +139,7 @@ class OdkProvider:
             "gets its own form."
         )
 
-    def deploy(self, deployment, content, establishments_csv, force=False):
+    def deploy(self, deployment, content, force=False, dataset=None):
         base = form_path(deployment.project_id, deployment.form_id)
         headers = {
             "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -176,12 +176,13 @@ class OdkProvider:
         else:
             upload(base + "/draft", data=content, headers=headers)
         attachments = request("GET", base + "/draft/attachments").json()
-        if any(item["name"] == "establishments.csv" for item in attachments):
+        if dataset and any(
+            item["name"] == "establishments.csv" for item in attachments
+        ):
             request(
-                "POST",
+                "PATCH",
                 base + "/draft/attachments/establishments.csv",
-                data=establishments_csv,
-                headers={"Content-Type": "text/csv"},
+                json={"dataset": dataset},
             )
         request("POST", base + "/draft/publish")
 
@@ -238,10 +239,15 @@ class OdkProvider:
         )
 
     def form_versions(self, deployment):
-        """Published form versions, newest first, as shown in Central."""
-        payload = request("GET", form_path(deployment.project_id, deployment.form_id) + "/versions").json()
+        payload = request(
+            "GET",
+            form_path(deployment.project_id, deployment.form_id) + "/versions",
+        ).json()
+        items = payload.get("value", []) if isinstance(payload, dict) else payload
         versions = []
-        for item in payload.get("value", []):
+        for item in items if isinstance(items, list) else []:
+            if not isinstance(item, dict):
+                continue
             version = str(item.get("version") or "")
             if not version:
                 continue
@@ -251,41 +257,56 @@ class OdkProvider:
         versions.sort(key=lambda item: item["version"], reverse=True)
         return versions
 
-    def provision_collector(self, deployment, display_name):
-        root = f"projects/{deployment.project_id}"
+    def create_collector(self, project_id, display_name):
         user = request(
-            "POST", root + "/app-users", json={"displayName": display_name}
+            "POST",
+            f"projects/{int(project_id)}/app-users",
+            json={"displayName": display_name},
         ).json()
-        try:
-            request(
-                "POST",
-                form_path(deployment.project_id, deployment.form_id)
-                + f"/assignments/app-user/{user['id']}",
-            )
-        except CollectionError:
-            request("DELETE", root + f"/app-users/{user['id']}")
-            raise
-        server_url = f"{settings.ODK_PUBLIC_URL.rstrip('/')}/v1/key/{quote(user['token'], safe='')}/projects/{deployment.project_id}"
-        project_name = getattr(getattr(deployment, "checklist", None), "name", None) or f"Mandi project {deployment.project_id}"
-        return {
-            "id": str(user["id"]),
-            "configuration": {
-                "server_url": server_url,
-                "qr": build_settings_qr(server_url, project_name),
-                "message": "Scan this QR in ODK Collect, or save the server URL. Mandi does not store the token.",
-            },
-        }
+        return {"id": str(user["id"]), "token": user["token"]}
 
-    def revoke_collector(self, grant):
+    def assign_collector(self, deployment, remote_id):
+        request(
+            "POST",
+            form_path(deployment.project_id, deployment.form_id)
+            + f"/assignments/app-user/{quote(str(remote_id), safe='')}",
+        )
+
+    def unassign_collector(self, deployment, remote_id):
         try:
             request(
                 "DELETE",
-                f"projects/{grant.deployment.project_id}/app-users/{grant.remote_id}",
+                form_path(deployment.project_id, deployment.form_id)
+                + f"/assignments/app-user/{quote(str(remote_id), safe='')}",
+            )
+        except CollectionError as exc:
+            if not self._missing(exc):
+                raise
+
+    def delete_collector(self, project_id, remote_id):
+        try:
+            request(
+                "DELETE",
+                f"projects/{int(project_id)}/app-users/"
+                f"{quote(str(remote_id), safe='')}",
             )
         except CollectionError as exc:
             # External administrators may already have removed this credential.
-            if (
-                not isinstance(exc.__cause__, requests.HTTPError)
-                or exc.__cause__.response.status_code != 404
-            ):
+            if not self._missing(exc):
                 raise
+
+    def collector_configuration(self, project_id, token):
+        project_id = str(int(project_id))
+        try:
+            project_name = (
+                request("GET", f"projects/{project_id}").json().get("name")
+                or f"Mandi project {project_id}"
+            )
+        except CollectionError:
+            project_name = f"Mandi project {project_id}"
+        server_url = f"{settings.ODK_PUBLIC_URL.rstrip('/')}/v1/key/{quote(token, safe='')}/projects/{project_id}"
+        return {
+            "server_url": server_url,
+            "qr": build_settings_qr(server_url, project_name),
+            "message": "Scan this QR in ODK Collect, or save the server URL. Mandi does not store the token.",
+        }

@@ -1,4 +1,3 @@
-import { useEstablishmentKinds } from "@/features/establishments/registry";
 import { FieldSupport } from "@/components/ui/field-support";
 import { CancelButton, SaveButton } from "@/components/public/ActionButton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -12,15 +11,12 @@ import { DialogClose } from "@/components/ui/dialog";
 import CustomFileInput from "@/components/ui/custom/CustomFileInput";
 import CustomForm from "@/components/ui/custom/CustomForm";
 import FormInput from "@/components/ui/custom/CustomInput";
-import FormSelect from "@/components/ui/custom/CustomSelect";
-import { choiceLabel } from "@/features/shared/labels";
 import type { Checklist } from "@/lib/api";
 import { api, errorMessage, fileUrl } from "@/lib/api";
 
 type ChecklistValues = {
   code: string;
   name: string;
-  establishment_kind: string;
   xlsform: File | null;
 };
 
@@ -32,13 +28,11 @@ export default function ChecklistForm({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const establishmentKinds = useEstablishmentKinds();
   const client = useQueryClient();
   const form = useForm<ChecklistValues>({
     defaultValues: {
       code: existing?.code ?? "",
       name: existing?.name ?? "",
-      establishment_kind: existing?.establishment_kind ?? "",
       xlsform: null,
     },
   });
@@ -57,14 +51,14 @@ export default function ChecklistForm({
     setReading(true);
     setMetadataError(null);
     api
-      .post<Partial<Record<"name" | "code" | "establishment_kind", string>>>(
+      .post<Partial<Record<"name" | "code", string>>>(
         "/checklists/metadata/",
         body,
         { signal: controller.signal },
       )
       .then(({ data }) => {
         if (controller.signal.aborted) return;
-        for (const field of ["name", "code", "establishment_kind"] as const) {
+        for (const field of ["name", "code"] as const) {
           // Never overwrite existing records or values the user has edited.
           if (!form.getFieldState(field).isDirty && !existing) {
             form.setValue(field, data[field] ?? "", { shouldValidate: true });
@@ -84,7 +78,6 @@ export default function ChecklistForm({
       const body = new FormData();
       body.append("code", values.code);
       body.append("name", values.name);
-      body.append("establishment_kind", values.establishment_kind);
       if (values.xlsform) body.append("xlsform", values.xlsform);
       return (
         existing
@@ -140,16 +133,6 @@ export default function ChecklistForm({
             name="code"
             label={t("Checklist code")}
             rules={{ required: t("Required") }}
-          />
-          <FormSelect
-            form={form}
-            name="establishment_kind"
-            label={t("Type")}
-            rules={{ required: t("Required") }}
-            items={establishmentKinds.map((value) => ({
-              value,
-              label: t(choiceLabel(value)),
-            }))}
           />
         </div>
       </fieldset>

@@ -6,6 +6,7 @@ import { Link, useParams } from "react-router";
 import { AppErrorState } from "@/components/public/AppErrorState";
 import { AppLoader } from "@/components/public/AppLoader";
 import AppTitle from "@/components/public/AppTitle";
+import { PageSection } from "@/components/PageSection";
 import { Button } from "@/components/ui/button";
 import { useApiQuery } from "@/features/shared/api";
 import { errorMessage } from "@/lib/api";
@@ -29,7 +30,7 @@ export default function SourceDetailPage() {
       </Link>
       <AppTitle
         title={data.name}
-        description={`${t(source === "licensing" ? "Licensing" : "Source details")} · ${data.application_id}`}
+        description={t(source === "licensing" ? "Licensing" : "Source details")}
         others={
           <Button
             variant="outline"
@@ -41,12 +42,14 @@ export default function SourceDetailPage() {
           </Button>
         }
       />
-      <p className="text-muted-foreground text-sm">
-        {t(
+      <PageSection
+        title={t("Source details")}
+        description={t(
           "Details are loaded from the linked source. Mandi establishment details remain separate.",
         )}
-      </p>
-      <SourceDetails data={data} />
+      >
+        <SourceDetails data={data} />
+      </PageSection>
     </div>
   );
 }

@@ -98,6 +98,32 @@ class AddEstablishmentQuestionTests(SimpleTestCase):
         with self.assertRaises(XlsFormError):
             add_establishment_question("form.xlsx", content)
 
+    def survey_names(self, content):
+        return [row["name"] for row in read_survey(content)]
+
+    def with_settings(self, value):
+        workbook = load_workbook(BytesIO(make_workbook(
+            ["type", "name", "label"], [["text", "respondent_name", "Name"]]
+        )))
+        settings = workbook.create_sheet("settings")
+        settings.append(["form_id", "mandi_establishment"])
+        settings.append(["test", value])
+        output = BytesIO()
+        workbook.save(output)
+        return output.getvalue()
+
+    def test_none_mode_skips_establishment_and_details(self):
+        updated, _ = add_establishment_question("form.xlsx", self.with_settings("none"))
+        names = self.survey_names(updated)
+        self.assertNotIn("establishment_id", names)
+        self.assertNotIn("mandi_est_details", names)
+
+    def test_optional_mode_does_not_require_establishment(self):
+        updated, _ = add_establishment_question("form.xlsx", self.with_settings("optional"))
+        rows = {row["name"]: row for row in read_survey(updated)}
+        self.assertIn("establishment_id", rows)
+        self.assertIn(rows["establishment_id"]["required"], (None, ""))
+
 
 class ChecklistMetadataTests(SimpleTestCase):
     def metadata(self, settings_rows=None):
@@ -113,23 +139,21 @@ class ChecklistMetadataTests(SimpleTestCase):
         workbook.save(output)
         return read_checklist_metadata("Checklist.xlsx", output.getvalue())
 
-    def test_reads_title_id_version_and_explicit_kind(self):
+    def test_reads_title_and_form_id(self):
         self.assertEqual(self.metadata([
             ["form_title", "form_id", "version", "establishment_kind"],
             ["بازرسی", "inspection", 20261110, "importer"],
-        ]), {"name": "بازرسی", "code": "inspection", "establishment_kind": "importer"})
+        ]), {"name": "بازرسی", "code": "inspection"})
 
     def test_missing_settings_uses_filename_without_guessing_type_or_version(self):
         self.assertEqual(self.metadata(), {"name": "Checklist", "code": ""})
 
-    def test_empty_settings_and_invalid_kind(self):
+    def test_establishment_kind_metadata_is_ignored(self):
         self.assertEqual(self.metadata([])["name"], "Checklist")
         self.assertNotIn("establishment_kind", self.metadata([
             ["form_title", "establishment_kind"], ["Title", "invalid type!"],
         ]))
-
-    def test_custom_type_metadata_is_supported(self):
-        self.assertEqual(self.metadata([["establishment_kind"], ["laboratory"]])["establishment_kind"], "laboratory")
+        self.assertNotIn("establishment_kind", self.metadata([["establishment_kind"], ["laboratory"]]))
 
     def test_invalid_file_is_a_readable_error(self):
         from apps.integrations.xlsform import read_checklist_metadata

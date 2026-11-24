@@ -58,7 +58,7 @@ SURVEY = [
         "select_one_from_file establishments.csv",
         "establishment_id",
         "Establishment",
-        "Search by name. The value submitted is the Mandi establishment UUID.",
+        "Search by name. The value submitted is the ODK Entity UUID.",
         "yes",
         "search",
         "",

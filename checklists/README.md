@@ -61,8 +61,10 @@ appearance: search
 required: yes
 ```
 
-and attaches `establishments.csv` (generated from Mandi establishments) as
-KoBo form media. Submissions are matched to establishments through that answer.
+and links the project's `establishments` Entity List to that attachment. Forms
+select a live Entity, so establishment changes do not require redeploying the
+form. Submissions are matched to establishments through the selected Entity
+UUID.
 
 ## Regenerating the workbook
 

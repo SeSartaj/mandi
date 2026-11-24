@@ -2,7 +2,7 @@
 
 Flow:
   1. Choose the establishment type.
-  2. The establishment list is filtered to that type (from establishments.csv).
+  2. The establishment list is filtered to that type from the Entity List.
   3. Details of the selected establishment are shown.
   4. Two scored sections; each section score and the total are calculated.
   5. start / end / device id / location are captured automatically.

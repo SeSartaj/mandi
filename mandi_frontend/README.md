@@ -15,9 +15,10 @@ from the copied CMS components rather than new page primitives. The Checklists
 screen lets administrators upload or replace `.xls`/`.xlsx` XLSForms, download
 them, and deploy them to KoBo. The Deploy action is guarded by
 `inspections.deploy_checklist` and displays the KoBo deployment status or error.
-Deployment adds the searchable Mandi establishment question and attaches the
-establishments CSV to the KoBo form. Establishment detail pages include a KoBo
-submissions panel that can sync and display submissions for that establishment. Routes, permissions, user identity, and logout are
+Deployment adds the searchable Mandi establishment question and links the
+project's establishments Entity List to the KoBo form. Establishment detail
+pages include a KoBo submissions panel that can sync and display submissions for
+that establishment. Routes, permissions, user identity, and logout are
 bound to those components. Breadcrumb labels and
 accessible control labels have been localized. The CMS active-position switcher
 and password dialog are omitted because those account APIs do not exist in
@@ -28,18 +29,11 @@ The original CMS theme is used directly. Mandi CSS only arranges page content; t
 
 The CMS language menu offers Pashto, Dari, and English. Pashto and Dari use RTL layouts and Vazirmatn. Theme selection uses the CMS light/dark/system menu. The selected language persists across reloads.
 
-Source-system and inspection fixture data remain demonstrations. Live integration work follows user review.
+Source-system data may be live or demonstration depending on backend configuration.
 
-The copied `Can` component guards routes, navigation, and actions. All CMS custom form components have been copied, and active forms use their React Hook Form wrappers. See [permissions and calendar notes](../docs/permissions-and-calendars.md) for group definitions, adaptations, and verification.
+The copied `Can` component guards routes, navigation, and actions. All CMS custom form components have been copied, and active forms use their React Hook Form wrappers. Backend permission groups and API enforcement are described in [development](../docs/development.md).
 
-Run `npm test` for permission/calendar checks.
-
-## Usability and reliability review
-
-See [frontend usability review](../docs/frontend-usability-review.md) for the
-10-heuristic assessment, shared-component refactors, regression checks, browser
-verification, and the remaining deployment boundary. Run `npm test` for both
-permission/calendar and frontend state/session regression tests.
+Run `npm test` for permission/calendar and frontend state/session regression tests.
 
 Reusable action buttons and fixed help/error space are documented in
 [semantic controls](../docs/semantic-controls.md).

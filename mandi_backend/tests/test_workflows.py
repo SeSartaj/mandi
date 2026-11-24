@@ -1,4 +1,3 @@
-from apps.establishments.models import EstablishmentType
 from apps.establishments.services import connect_source, save_establishment
 from apps.inspections.models import Checklist
 from apps.inspections.services import deploy_checklist, save_checklist
@@ -31,7 +30,6 @@ class WorkflowTests(TestCase):
         self.checklist = Checklist.objects.create(
             code="pharmacy",
             name="Pharmacy",
-            establishment_kind=EstablishmentType.objects.get(pk="pharmacy"),
         )
         self.client = APIClient()
         self.client.force_authenticate(self.manager)
@@ -54,7 +52,6 @@ class WorkflowTests(TestCase):
         values = {
             "code": "new-pharmacy",
             "name": "New pharmacy checklist",
-            "establishment_kind": EstablishmentType.objects.get(pk="pharmacy"),
         }
         with self.assertRaises(ValidationError):
             save_checklist(self.manager, values)
@@ -69,7 +66,6 @@ class WorkflowTests(TestCase):
                 {
                     "code": "pharmacy",
                     "name": "Duplicate",
-                    "establishment_kind": EstablishmentType.objects.get(pk="pharmacy"),
                     "xlsform": self.upload(),
                 },
             )
@@ -80,7 +76,6 @@ class WorkflowTests(TestCase):
             {
                 "code": "api-pharmacy",
                 "name": "API pharmacy checklist",
-                "establishment_kind": "pharmacy",
                 "xlsform": self.upload("api-checklist.xlsx"),
             },
             format="multipart",
@@ -102,7 +97,6 @@ class WorkflowTests(TestCase):
         checklist = Checklist.objects.create(
             code="deploy-test",
             name="Deploy test",
-            establishment_kind=EstablishmentType.objects.get(pk="pharmacy"),
             xlsform=self.upload("deploy-checklist.xlsx"),
         )
         self.addCleanup(checklist.xlsform.delete, save=False)

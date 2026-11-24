@@ -84,6 +84,63 @@ Open http://127.0.0.1:5174 and sign in with the superuser you created. The front
 
 PostgreSQL is required when `DJANGO_DEBUG=0`. The database-only Compose file used by earlier review builds has been removed; use the full stack above for PostgreSQL and ODK collection.
 
+## Docker development with live reload
+
+The production Compose stack bakes code into images and runs gunicorn/nginx.
+For local iteration use the override file instead: it bind-mounts the source and
+runs Django's development server and Vite, so saving a file reloads without
+rebuilding an image.
+
+```bash
+scripts/dev-docker.sh start                    # Django in Docker, Vite on the host
+npm --prefix mandi_frontend run dev            # second terminal
+
+# or run both in containers (official node image; no app image build)
+scripts/dev-docker.sh start --with-frontend
+
+# add ODK Central and the Caddy proxy
+scripts/dev-docker.sh start --with-central
+```
+
+- `http://127.0.0.1:8000` — Django with autoreload, reading `mandi_backend/.env`.
+- `http://127.0.0.1:5174` — Vite with HMR.
+- Postgres is published on `127.0.0.1:5433` for host-side tools.
+
+ODK Central is not started by default. `--with-central` starts
+`central-service` and `central-web` plus their dependencies (Central database,
+secrets, pyxform, mail, Enketo/Redis) and the Caddy proxy. Central is then at
+`PUBLIC_COLLECTION_URL` with the credentials from `.env`. The flag reuses
+existing `mandi-central-*` images; build them first with
+`./scripts/deploy.sh --with-central` or
+`docker compose -f compose.yml build central-service central-secrets central-web central-enketo`
+(the build needs the pinned checkout from `./scripts/setup.sh`). The first run
+creates fresh Central volumes and bootstraps its administrator and service
+account. The proxy's Mandi route still points at `web-blue`, which this stack
+does not run, so use `127.0.0.1:5174` for Mandi.
+
+The backend image `mandi-backend:dev` is built once. Rebuild it only after
+changing `requirements.txt`; the frontend container needs no build at all:
+
+```bash
+docker compose -f compose.yml -f compose.dev.yml build mandi-init
+```
+
+Common commands:
+
+```bash
+scripts/dev-docker.sh status
+scripts/dev-docker.sh migrate     # manage.py migrate in the container
+scripts/dev-docker.sh test        # manage.py test tests in the container
+scripts/dev-docker.sh logs        # follow the backend log
+scripts/dev-docker.sh stop        # keep the Postgres and media volumes
+```
+
+This stack uses the `mandi-postgres` volume and is separate from the SQLite
+development database; it seeds locations and the administrator from `.env` on
+start. Without `--with-central` it does not start ODK Central or the Caddy
+proxy. Stop the host stack first (`scripts/dev-local.sh stop`) because both
+publish ports 8000 and 5174.
+
 ## Database connection refused
 
 If `runserver` passes system checks but reports `connection refused`, the local
@@ -94,25 +151,24 @@ SQLite for backend-only work.
 
 ## Review walkthrough
 
-1. Check the dashboard: distinguish unique establishments from inspection visits, and approved from unapproved entries.
-2. Search establishments, create one, edit its details, and inspect its history.
-3. Connect a demonstration survey, archive, or licensing record. Its details appear separately. Correct a connection by disconnecting it and selecting another record.
-4. Open an unapproved demonstration inspection, inspect its selected results, and approve it.
-5. Filter inspections by dates, type, approval, establishment category, province, inspector, and checklist.
-6. Open **Checklists**, add a checklist with an `.xls`/`.xlsx` XLSForm, edit it, and download its file.
-7. Check coverage reports; date inputs and stored dates use Gregorian values while the UI can display Shamsi or Qamari.
-8. Switch between English, Dari, and Pashto/RTL and try the mobile navigation and dark theme.
+1. Check the dashboard: establishment, checklist, and submission counts plus recent submissions.
+2. Search establishments, create one, edit its details, and open its detail page.
+3. Connect a Licensing, Survey, or Archive record. Its details appear in a separate source panel; correct a connection by disconnecting and selecting another record.
+4. Open a submission from an establishment or checklist: inspect section scores, grouped answers, media, and the raw payload.
+5. Filter submissions by establishment, checklist, establishment type, and date range.
+6. Open **Checklists**, add a checklist with an `.xls`/`.xlsx` XLSForm, deploy it, and download the original file.
+7. Switch calendars, language, theme, and mobile navigation; date inputs remain Gregorian while display can use Shamsi or Qamari.
 
 ## Structure and conventions
 
 - `mandi_backend/apps/core/models.py`: `BaseModel` with `created_at`, `updated_at`, `created_by`, and `updated_by`; `Country`, `Province`, and `District` use it.
 - `mandi_backend/apps/*/services.py`: domain operations, authorization, transactions, reporting, and integration orchestration.
 - Models: persistence and database constraints. API serializers: input/output shape. API views: thin service calls.
-- `mandi_backend/config/api/`: views grouped by domain (`accounts`, `establishments`, `inspections`, `checklists`, `submissions`, `reporting`), shared input/output serializers, and pagination/validation helpers. Views handle HTTP; domain rules and persistence stay in app services.
+- `mandi_backend/config/api/`: views grouped by domain (`accounts`, `establishments`, `establishment_types`, `checklists`, `collection`, `odk_projects`), shared input/output serializers, and pagination/validation helpers. Views handle HTTP; domain rules and persistence stay in app services.
 - `mandi_frontend/src/features/*`: Mandi screens organized like the CMS features. Pages use the copied CMS `PageSection`, `AppTitle`, `AppTable`, `AppPagination`, `AppFilterPanel`, `AppErrorState`, `AppLoader`, `AppDialog`, form components, and calendar controls.
 - `mandi_frontend`: copied CMS build configuration, theme, fonts, dashboard layout/sidebar/header, shared UI/public component set, and supporting shared components, with Mandi screens and API/session adaptation.
-- Establishment, source-link, and inspection records are read-only in Django admin so changes cannot bypass services. Checklist add/edit (including XLSForm upload) and inspection add are available as service-backed admin forms; inspection approval remains in the application. `apps/core` provides countries, provinces, districts, and shared abstract model helpers. Account/group administration uses Django's built-in administration. Open `/admin/` on the backend port (`8000`) with a staff/superuser account; create one with `createsuperuser` if needed.
-- New employees can be assigned predefined groups in their creation form by an authorized administrator. They are not automatically granted reviewer privileges.
+- Establishment and source-link records are read-only in Django admin so changes cannot bypass services. Checklist add/edit (including XLSForm upload) is available as a service-backed admin form. `apps/core` provides countries, provinces, districts, and shared abstract model helpers. Account/group administration uses Django's built-in administration. Open `/admin/` on the backend port (`8000`) with a staff/superuser account; create one with `createsuperuser` if needed.
+- New employees can be assigned predefined groups in their creation form by an authorized administrator. They receive only the permissions of the groups selected.
 
 ## API contract
 
@@ -120,7 +176,7 @@ The authenticated `GET /api/v1/schema/` endpoint returns an OpenAPI 3 contract g
 
 ## Permissions and calendars
 
-See [permissions-and-calendars.md](permissions-and-calendars.md) for migration-installed groups, Can guards, copied form components, and calendar conversion.
+Permission groups are installed by `mandi_backend/apps/accounts/migrations/0003_predefined_groups.py`; API services enforce them, and the copied CMS `Can` component guards routes and actions. The copied CMS calendar selector supports Gregorian, Shamsi, and Qamari display while API values remain Gregorian.
 
 ## Checklist deployment and collection (ODK Central)
 
@@ -131,19 +187,26 @@ integration operators receive.
 
 - `POST /api/v1/checklists/{id}/deploy/` prepares the XLSForm, adds a first
   `select_one_from_file establishments.csv` question named `establishment_id`
-  when missing, inserts read-only establishment detail rows after it, and
-  publishes the form to the provider.
-- The detail rows are wrapped in one `field-list` group, so Collect shows the
-  whole Licensing profile on a single page instead of one page per field. They
-  use `pulldata('establishments', '<column>', 'name', ${establishment_id})`
-  calculations plus notes, so collectors see the selected establishment's
-  province, district, address, license number/dates, grade, owner, owner
-  phone/email, technical manager and phone, technical staff count, and
-  activities offline. Empty values are hidden with `relevant`.
-- `GET /api/v1/integrations/establishments.csv` downloads the establishment CSV
-  used by that question, including those Licensing fields from the stored
-  business/contact projection. It requires `inspections.deploy_checklist`
-  because it contains owner/technical-manager contact details.
+  when missing, inserts read-only establishment detail rows, and publishes it.
+  Set `mandi_establishment=none` in the XLSForm settings to skip the
+  establishment block for forms that do not belong to an establishment;
+  `mandi_establishment=optional` makes the question optional.
+- The source is the project-scoped ODK Entity List `establishments`
+  (`ODK_ENTITY_LIST`). Deployment creates the list/properties when needed,
+  reconciles it with Mandi establishments, and links it to the form draft
+  attachment before publishing. Central requires Entity UUIDs to be globally
+  unique, so Mandi derives a deterministic UUID per establishment and project,
+  stores it in `EntityBinding`, and uses that binding to resolve the submitted
+  `establishment_id` back to the Mandi record.
+- Run `manage.py sync_entities --once` or
+  `POST /api/v1/integrations/entities/sync/` to reconcile establishments and
+  Licensing projections into Central. The worker runs it every
+  `ENTITY_SYNC_INTERVAL` seconds and syncs every project used by a deployed form.
+  Existing entities are updated with `force=true`; entities that exist only in
+  Central are left untouched.
+- The detail rows are wrapped in one `field-list` group and read properties from
+  the Entity List. Forms still use `select_one_from_file establishments.csv`, so
+  no form version is needed when establishment data changes.
 - Adding the detail rows changes the form structure, so an already-published
   form must normally be published under a new checklist code/version rather than
   redeployed in place; Central's structure warning is reported with a hint. The
@@ -152,9 +215,8 @@ integration operators receive.
   accept that older submissions may become unreadable.
 - `POST /api/v1/integrations/collection/sync/` pulls submissions from deployed
   forms. Pass `{"checklist_id": ...}` or `{"establishment_id": ...}` to limit a
-  sync.
-- Stored submissions live in `CollectionSubmission`; deployment metadata is in
-  `FormDeployment`, and collection access grants are in `CollectorGrant`.
+  sync. Submissions from forms without an establishment are stored with no
+  establishment link and receive an establishment snapshot when one is present.
 
 ## Browsing checklists and submissions
 
@@ -178,11 +240,9 @@ integration operators receive.
 
 `GET /api/v1/integrations/establishment-choices/?kind=pharmacy` returns stable Mandi IDs as choice names and readable labels. It is an authenticated JSON export, not a live preload/pull integration.
 
-`POST /api/v1/integrations/ingest/` accepts normalized inspection summaries. It requires the inspection-add permission. Provider adapters and actual field mappings are not implemented yet. The input's mapping version records which mapping produced a result; it does not perform mapping itself.
+`POST /api/v1/integrations/collection/sync/` pulls submissions from deployed forms. Submission identity is `(deployment, submission_id)`: an unchanged retry preserves the stored record, and a changed submission updates it in place. Mandi stores the raw submission plus the deployed form schema, resolves `establishment_id` through `EntityBinding`, and stores an establishment snapshot at ingestion.
 
-Submission identity is `(provider, provider_form_id, submission_id)`. An unchanged retry preserves the record and approval. A changed submission updates the existing record, resets approval, and creates an audit entry. This is a conservative provisional rule for review, not a finalized rejection/revision workflow.
-
-Selected summaries currently support overall percentage, named sections with earned/possible scores, and findings with actions/deadlines. Full answers, attachments, sample/quarantine annexes, and laboratory workflows are deferred to actual checklist conversion. No score is automatically derived from unresolved paper-checklist rules.
+Section scores are read from `score_*`, `max_*`, and `pct_*` fields when present; nothing is recalculated from unresolved paper-checklist rules. Answers, choices, groups, media, and attachments are rendered from the stored form schema and streamed through Mandi.
 
 Source links currently allow one external record per source per establishment, and prevent the same source record from being connected to two Mandi establishments. Review this assumption if source systems represent branches or duplicates differently.
 
@@ -228,35 +288,21 @@ while preserving data:
 docker compose stop
 ```
 
-## Verification recorded on 2026-11-07
-
-- 18 backend workflow/API tests passed against PostgreSQL.
-- Django system checks and migration consistency checks passed.
-- Frontend production build, lint, and formatting checks passed.
-- Browser checks verified establishment creation/editing, demonstration source search/linking, inspection approval, inspection filters, coverage reporting, and English/Dari/Pashto RTL, desktop/mobile, and dark layouts. Browser-created synthetic review records remain available for inspection.
-
-## CMS layout and Pashto follow-up
-
-The custom shell has been replaced with the actual AFDA CMS DashboardLayout, sidebar/header, user dropdown, and theme/language controls. Tables, dialogs, selects, labels, pagination, badges, textareas, and page sections use copied CMS components. The CMS theme replaces the original Mandi theme overrides. Pashto translations cover every Mandi-specific Dari key; shared controls use the CMS Pashto translations. See `mandi_frontend/README.md` for provenance and adaptations.
-
-Copied shared components retain lint warnings present in their implementation (component exports, effect state updates, and a skeleton's random width); no lint errors are introduced.
-
-The follow-up adds the copied CMS calendar selector and custom form wrappers, predefined groups through migrations, and Can guards. Current verification: 24 backend tests and three frontend permission/calendar tests pass.
-
 ### Checklist metadata from XLSForm
 
-When adding a checklist, select its XLSForm first. Mandi previews the workbook through
-`POST /api/v1/checklists/metadata/` and fills `name` from `settings.form_title`,
-`code` from `settings.form_id`, and `version` from `settings.version`. If no title
-is provided, it uses the filename without its extension. Missing code/version
-remain editable required fields. Manual edits and existing checklist details are
+When adding a checklist, select its XLSForm first. Mandi previews the workbook
+through `POST /api/v1/checklists/metadata/` and fills `name` from
+`settings.form_title` and `code` from `settings.form_id`. If no title is
+provided, it uses the filename without its extension. A missing code remains an
+editable required field. Manual edits and existing checklist details are
 preserved when a file is selected or replaced.
 
-An optional Mandi-specific `establishment_kind` column in the `settings` sheet
-can supply the type: `pharmacy`, `wholesaler`, `importer`, or `factory`. Standard
-XLSForms do not specify this business classification; when absent, select it
-manually. Previewing does not store a file or create a checklist. Both `.xlsx`
-and the existing LibreOffice-based `.xls` conversion are supported.
+Checklists are no longer tied to an establishment type and no longer store a
+business version. Deployment links the project's `establishments` Entity List so
+forms can select from all establishments; forms that ask for an establishment
+type can still filter the select question with `choice_filter`. Previewing does
+not store a file or create a checklist. Both `.xlsx` and the existing
+LibreOffice-based `.xls` conversion are supported.
 
 ### User accounts and checklist access
 
@@ -268,10 +314,10 @@ checklist access. Normal role permissions are still required; the allowlist does
 not grant editing, deployment, or administration rights. Superusers retain full
 access. Existing accounts remain unrestricted unless explicitly changed.
 
-Restrictions apply to checklist and inspection lists/details, related submissions
-and attachments, sync/deployment operations, and corresponding admin records.
-Coverage counts use the user's visible inspections. A restricted user who has
-permission to create a checklist automatically receives access to that new form.
+Restrictions apply to checklist and submission lists/details, related attachments,
+sync/deployment operations, and corresponding admin records. A restricted user
+who has permission to create a checklist automatically receives access to that
+new form.
 
 ### Background audio playback
 

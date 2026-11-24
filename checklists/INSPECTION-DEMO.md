@@ -10,8 +10,8 @@ Mandi + ODK Central workflow behaves. Regenerate it with:
 ## What the form demonstrates
 
 - **Establishment lookup** — `establishment_id` is a searchable
-  `select_one_from_file establishments.csv` question. Mandi generates the CSV
-  from establishments of the checklist's kind.
+  `select_one_from_file establishments.csv` question linked to the project's
+  ODK Entity List.
 - **Automatic timestamps** — `start` and `end` are ODK metadata saved with every
   submission, along with `today`, `deviceid`, and `username`.
 - **Location** — a required `geopoint` captured with the map placement control.
@@ -32,10 +32,10 @@ submission root because Mandi's sync reads those fields there.
 1. Create or update establishments in **Mandi → Establishments**.
 2. Open **Mandi → Checklists**, upload `mandi_inspection_demo.xlsx`, and choose
    the establishment kind (the workbook is set up for `pharmacy`).
-3. Deploy the checklist. Mandi keeps the original, prepares the form, attaches
-   `establishments.csv`, and publishes it to Central.
-4. Add new establishments later, then **redeploy** the checklist and refresh the
-   form on devices so the CSV snapshot is current.
+3. Deploy the checklist. Mandi keeps the original, prepares the form, links the
+   project's `establishments` Entity List, and publishes it to Central.
+4. Entity changes sync automatically; refresh the form on devices to receive the
+   latest establishment data without redeploying.
 
 ## Connect ODK Collect
 

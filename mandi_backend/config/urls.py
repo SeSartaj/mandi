@@ -8,7 +8,7 @@ from .api.establishments import NearbyEstablishments, RegistryCatalog, RegistryI
 from .schema import Schema
 from .api.checklists import ChecklistDownload
 from .api.accounts import EmployeeDetail
-from .api.collection import CollectionSync, CollectionSubmissions, CollectionSubmissionDetail, CollectorAccess, CollectionAttachment
+from .api.collection import CollectionSync, CollectionSubmissions, CollectionSubmissionDetail, CollectorAccess, CollectionAttachment, CollectionProjects, EntitySync
 
 
 def health(request):
@@ -32,7 +32,9 @@ urlpatterns = [
     path("api/v1/checklists/<int:pk>/download/", ChecklistDownload.as_view()),
     path("api/v1/employees/<int:pk>/", EmployeeDetail.as_view()),
     path("api/v1/employees/<int:pk>/collection-access/", CollectorAccess.as_view()),
+    path("api/v1/collection/projects/", CollectionProjects.as_view()),
     path("api/v1/integrations/collection/sync/", CollectionSync.as_view()),
+    path("api/v1/integrations/entities/sync/", EntitySync.as_view()),
     path("api/v1/odk/projects/", api.OdkProjects.as_view()),
     path("api/v1/odk/projects/<int:project_id>/", api.OdkProjectDetail.as_view()),
     path("api/v1/integrations/establishments.csv", api.EstablishmentsCsv.as_view()),

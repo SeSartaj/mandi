@@ -106,13 +106,13 @@ export default function SubmissionDetailPage() {
               <SystemDateTime value={data.submitted_at} includeTime />
             </span>
             <span>·</span>
-            <span>
+            {data.establishment_id ? (
               <Link className="text-link" to={`/establishments/${data.establishment_id}`}>
                 {t("Establishment")}
               </Link>
-            </span>
-            <span>·</span>
-            <code>{data.submission_id}</code>
+            ) : (
+              <span>{t("No establishment")}</span>
+            )}
             {data.form_version ? (
               <>
                 <span>·</span>

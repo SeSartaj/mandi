@@ -1,6 +1,5 @@
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import SourceDetails, { DeferredMap, type SourceDetail } from "./SourceDetails";
-import { useLocationName, useRegistryCatalog } from "@/features/establishments/registry";
+import { useLocationName } from "@/features/establishments/registry";
 import RegistryOwnership from "@/features/establishments/RegistryOwnership";
 import { EditButton } from "@/components/public/ActionButton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -21,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import EstablishmentForm from "@/features/establishments/EstablishmentForm";
-import SourcePanel from "@/features/establishments/SourcePanel";
+import EstablishmentMappings from "@/features/establishments/EstablishmentMappings";
 import { useApiQuery } from "@/features/shared/api";
 import { choiceLabel, pageCount } from "@/features/shared/labels";
 import { useTablePageSize } from "@/hooks/useTablePageSize";
@@ -81,7 +80,6 @@ function ScoreBar({ percent }: { percent: number | null }) {
 
 export default function EstablishmentDetailPage() {
   const { t } = useTranslation();
-  const catalog = useRegistryCatalog();
   const locationName = useLocationName();
   const { id } = useParams();
   const client = useQueryClient();
@@ -210,29 +208,7 @@ export default function EstablishmentDetailPage() {
       ) : null}
 
       <Can permission="establishments.view_sourcelink">
-        <PageSection title={t("Source systems")}>
-          {!!catalog.data?.systems.length && (
-            <Tabs defaultValue={catalog.data.systems[0].code}>
-              <TabsList aria-label={t("Source systems")}>
-                {catalog.data.systems.map(({ code, name }) => (
-                  <TabsTrigger key={code} value={code}>
-                    {t(name)}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              {catalog.data.systems.map(({ code, name, searchable }) => (
-                <TabsContent key={code} value={code}>
-                  <SourcePanel
-                    establishment={establishment}
-                    source={code}
-                    title={name}
-                    searchable={searchable}
-                  />
-                </TabsContent>
-              ))}
-            </Tabs>
-          )}
-        </PageSection>
+        <EstablishmentMappings establishment={establishment} />
       </Can>
 
       <PageSection
@@ -300,9 +276,6 @@ export default function EstablishmentDetailPage() {
                         {submission.checklist_name ?? "—"}
                         {submission.form_version ? ` · ${submission.form_version}` : ""}
                       </span>
-                      <small className="muted block">
-                        <code>{submission.submission_id}</code>
-                      </small>
                     </div>
                   </TableCell>
                   <TableCell>

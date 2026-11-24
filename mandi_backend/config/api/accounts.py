@@ -5,7 +5,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .common import paginated, session, validated
-from .serializers import EmployeeInput, LoginInput, UserSerializer
+from .serializers import EmployeeDetailSerializer, EmployeeInput, LoginInput, UserSerializer
 
 
 class PermissionGroups(APIView):
@@ -63,6 +63,14 @@ class Employees(APIView):
 
 
 class EmployeeDetail(APIView):
+    def get(self, request, pk):
+        employee = accounts.get_employee(request.user, pk)
+        return Response(EmployeeDetailSerializer(employee).data)
+
     def patch(self, request, pk):
         from .serializers import EmployeeUpdate
-        return Response(UserSerializer(accounts.update_employee(request.user, pk, validated(EmployeeUpdate, request.data))).data)
+
+        employee = accounts.update_employee(
+            request.user, pk, validated(EmployeeUpdate, request.data)
+        )
+        return Response(EmployeeDetailSerializer(employee).data)

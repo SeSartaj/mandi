@@ -316,18 +316,23 @@ def openapi_document():
     route(
         "/employees/{pk}/collection-access/",
         "get",
-        "List active collector grants",
+        "List active collector credentials grouped by ODK project",
         array({"type": "object"}),
     )
     route(
         "/employees/{pk}/collection-access/",
         "post",
-        "Provision one form credential; configuration is returned once",
+        "Provision or extend a collector credential for one or more checklists",
         {"type": "object"},
         {
             "type": "object",
-            "required": ["checklist_id"],
-            "properties": {"checklist_id": {"type": "integer"}},
+            "required": ["checklist_ids"],
+            "properties": {
+                "checklist_ids": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                }
+            },
         },
         code=201,
     )
@@ -348,6 +353,19 @@ def openapi_document():
         "Import provider submissions into the local submissions list",
         {"type": "object"},
         {"type": "object", "properties": {"checklist_id": {"type": "integer"}}},
+    )
+    route(
+        "/integrations/entities/sync/",
+        "post",
+        "Reconcile establishments into the ODK Entity List",
+        {"type": "object"},
+        {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "integer"},
+                "dataset": {"type": "string"},
+            },
+        },
     )
     route(
         "/checklists/{pk}/collection-submissions/",

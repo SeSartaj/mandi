@@ -78,6 +78,41 @@ def _as_xlsx(filename, content):
         return converted.read_bytes(), f"{Path(filename).stem}.xlsx"
 
 
+def _form_setting(workbook, key):
+    if "settings" not in workbook.sheetnames:
+        return ""
+    sheet = workbook["settings"]
+    header_row = next(
+        (
+            row
+            for row in range(1, sheet.max_row + 1)
+            if any(cell.value is not None for cell in sheet[row])
+        ),
+        None,
+    )
+    if header_row is None:
+        return ""
+    column = next(
+        (
+            cell.column
+            for cell in sheet[header_row]
+            if str(cell.value or "").strip().lower() == key
+        ),
+        None,
+    )
+    if column is None:
+        return ""
+    value_row = next(
+        (
+            row
+            for row in range(header_row + 1, sheet.max_row + 1)
+            if any(cell.value is not None for cell in sheet[row])
+        ),
+        None,
+    )
+    return str(sheet.cell(value_row, column).value or "").strip().lower() if value_row else ""
+
+
 def _ensure_column(survey, header_row, columns, name):
     if name in columns:
         return columns[name]
@@ -93,6 +128,10 @@ def add_establishment_question(filename, content):
     workbook = load_workbook(io.BytesIO(xlsx_content))
     if "survey" not in workbook.sheetnames:
         raise XlsFormError("The XLSForm has no 'survey' sheet.")
+
+    establishment_mode = _form_setting(workbook, "mandi_establishment")
+    if establishment_mode == "none":
+        return xlsx_content, xlsx_name
 
     survey = workbook["survey"]
     header_row = None
@@ -145,7 +184,7 @@ def add_establishment_question(filename, content):
             "name": "establishment_id",
             "label": _establishment_label(label_header),
             "appearance": "search",
-            "required": "yes",
+            "required": "" if establishment_mode == "optional" else "yes",
         }
         for key, value in values.items():
             column = label_column if key == "label" else columns.get(key)
@@ -232,10 +271,6 @@ def read_checklist_metadata(filename, content):
             "name": metadata.get("form_title") or Path(filename).stem,
             "code": metadata.get("form_id", ""),
         }
-        # Establishment type is a Mandi extension, not a standard XLSForm setting.
-        kind = metadata.get("establishment_kind", "").lower()
-        if kind and len(kind) <= 20 and all(char.isascii() and (char.isalnum() or char in "-_") for char in kind):
-            result["establishment_kind"] = kind
         return result
     finally:
         workbook.close()

@@ -19,7 +19,7 @@ The full source is a hospital-pharmacy checklist; this adaptation uses general p
 ## Collection sequence
 
 1. Required live photograph of the pharmacy front and signboard.
-2. Select the pharmacy from Mandi's `establishments.csv`.
+2. Select the pharmacy from the project's ODK Entity List.
 3. Required GPS capture at the pharmacy entrance, without manual map placement.
 4. Five short checks with answers: verified yes, problem found, or not verified.
 5. Required photographs of the licence (or its missing location), one sampled medicine's label/expiry, and the storage area.
@@ -40,8 +40,8 @@ or spoofed device GPS/clock. No Android device acceptance test has been performe
 
 The workbook intentionally includes `establishment_id` after the front photograph. Mandi's deployer
 detects the existing question and therefore does not prepend another establishment question.
-Mandi attaches the current establishments CSV during deployment. Direct KoBo upload needs that
-CSV attached separately.
+Mandi links the project's establishments Entity List during deployment. Direct KoBo upload needs that
+Entity List linked separately.
 
 Validated with the connected KoBo container's pyxform converter. Verified compiled XML contains
 both languages, automatic metadata, conditional evidence requirements, camera-only uploads,

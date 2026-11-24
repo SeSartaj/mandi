@@ -308,5 +308,8 @@
   "No nearby establishments with saved coordinates.": "د ثبت شویو مختصاتو سره نږدې تاسیسات نشته.",
   "Showing the closest 100 establishments.": "تر ټولو نږدې ۱۰۰ تاسیسات ښودل کېږي.",
   "Provide both latitude and longitude.": "عرض البلد او طول البلد دواړه ولیکئ.",
-  "Invalid coordinates.": "مختصات ناسم دي."
+  "Invalid coordinates.": "مختصات ناسم دي.",
+  "Afghanistan Food and Drug Authority": "د افغانستان د درملو او خوړو اداره",
+  "Digital inspection workspace": "د پلټنې ډیجیټل کاري چاپېریال",
+  "Establishments, checklists and inspection results in one place.": "تأسیسات، چک لېستونه او د پلټنې پایلې په یو ځای کې"
 }

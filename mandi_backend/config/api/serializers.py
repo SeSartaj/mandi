@@ -15,6 +15,39 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ("id", "username", "display_name", "position", "is_active", "is_staff", "groups", "restrict_checklist_access", "allowed_checklists")
 
 
+class EmployeeDetailSerializer(UserSerializer):
+    groups_info = serializers.SerializerMethodField()
+    allowed_checklists_info = serializers.SerializerMethodField()
+
+    class Meta(UserSerializer.Meta):
+        fields = UserSerializer.Meta.fields + (
+            "is_superuser",
+            "date_joined",
+            "last_login",
+            "groups_info",
+            "allowed_checklists_info",
+        )
+
+    def get_groups_info(self, obj):
+        return [
+            {
+                "id": group.pk,
+                "name": group.name,
+                "permissions": sorted(
+                    f"{permission.content_type.app_label}.{permission.codename}"
+                    for permission in group.permissions.all()
+                ),
+            }
+            for group in obj.groups.all().order_by("name")
+        ]
+
+    def get_allowed_checklists_info(self, obj):
+        return [
+            {"id": checklist.pk, "code": checklist.code, "name": checklist.name}
+            for checklist in obj.allowed_checklists.all().order_by("name")
+        ]
+
+
 class EmployeeInput(serializers.Serializer):
     username = serializers.CharField(max_length=150)
     display_name = serializers.CharField(max_length=200)

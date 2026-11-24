@@ -38,7 +38,7 @@ def save_checklist(actor, data, pk=None):
     if pk:
         require_checklist_access(actor, pk)
     obj = get_checklist(actor, pk) if pk else Checklist()
-    for field in ("code", "name", "establishment_kind", "allows_all_types"):
+    for field in ("code", "name"):
         if field in data:
             setattr(obj, field, data[field])
     if not pk:

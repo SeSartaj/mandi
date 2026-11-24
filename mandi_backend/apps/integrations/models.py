@@ -18,6 +18,7 @@ class FormDeployment(models.Model):
     deployed_at = models.DateTimeField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     schema = models.JSONField(default=dict)
+    entity_list = models.CharField(max_length=100, blank=True)
 
     class Meta:
         constraints = [
@@ -38,10 +39,15 @@ class CollectionSubmission(models.Model):
     )
     submission_id = models.CharField(max_length=200)
     establishment = models.ForeignKey(
-        Establishment, on_delete=models.PROTECT, related_name="collection_submissions"
+        Establishment,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="collection_submissions",
     )
     submitted_at = models.DateTimeField(null=True)
     form_version = models.CharField(max_length=100, blank=True)
+    establishment_snapshot = models.JSONField(default=dict, blank=True, editable=False)
     data = models.JSONField(default=dict)
     synced_at = models.DateTimeField(auto_now=True)
 
@@ -51,6 +57,25 @@ class CollectionSubmission(models.Model):
             models.UniqueConstraint(
                 fields=["deployment", "submission_id"],
                 name="collection_submission_unique",
+            )
+        ]
+
+
+class EntityBinding(models.Model):
+    """The ODK Entity UUID used for an establishment in one Central project."""
+
+    establishment = models.ForeignKey(
+        Establishment, on_delete=models.CASCADE, related_name="entity_bindings"
+    )
+    project_id = models.CharField(max_length=100)
+    entity_uuid = models.UUIDField(unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["establishment", "project_id"],
+                name="entity_binding_project_unique",
             )
         ]
 

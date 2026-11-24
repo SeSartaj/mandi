@@ -125,15 +125,17 @@ the mandi will decide which data it needs from the kobo
 the kobo will pull or preload the list of each establishment based on form, like one form question, user will search and select.
 
 
-## Local review build
+## Current build
 
-The first implementation milestone is ready for local review: Django/PostgreSQL backend with business logic in services, and a React frontend adapted from the AFDA CMS setup. It includes establishment records and manual source links, a unified submissions list with form-version tracking, employee creation, a core geography app, and checklist XLSForm uploads and deployment. Live integrations and actual checklist conversion follow review.
+Mandi runs a Django/PostgreSQL backend with business logic in services, and a React frontend adapted from the AFDA CMS setup. It includes the establishment registry and external source mappings, XLSForm checklists deployed through ODK Central, collection submissions with form-version tracking, employee and permission management, and a core geography app.
 
 - [Run and review the system](docs/development.md)
-- [Implementation plan](docs/implementation-plan.md)
-- [Requirement review and drift corrections](docs/implementation-review.md)
-- [Checklist findings](docs/checklist-review-findings.txt)
+- [Deployment and operations](docs/deployment.md)
+- [Establishment registries and external sources](docs/registry-and-evidence.md)
+- [Licensing API reference](docs/licensing-api-reference.md)
+- [Checklist source review](docs/checklist-review-findings.md)
+- [Product notes](docs/brainstorming_nov21_2026.md)
 
-## Establishment registries and inspection evidence
+## Establishment registries and external sources
 
-See [registry ownership, adapters and acceptance tests](docs/registry-and-evidence.md) for native/imported establishments, configurable types, primary sources and historical evidence.
+See [registry ownership and external source mappings](docs/registry-and-evidence.md) for native/imported establishments, configurable types, primary sources, and automatic registry synchronization.

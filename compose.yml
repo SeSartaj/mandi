@@ -24,6 +24,9 @@ x-mandi-env: &mandi-env
   ODK_EMAIL: ${ODK_EMAIL:-mandi-service@example.invalid}
   ODK_PASSWORD: ${ODK_PASSWORD:?Run scripts/setup.sh}
   ODK_PROJECT_ID: ${ODK_PROJECT_ID:-1}
+  ODK_ENTITY_LIST: ${ODK_ENTITY_LIST:-establishments}
+  ODK_ENTITY_BATCH_SIZE: ${ODK_ENTITY_BATCH_SIZE:-250}
+  ENTITY_SYNC_INTERVAL: ${ENTITY_SYNC_INTERVAL:-300}
   MANDI_ADMIN_USERNAME: ${MANDI_ADMIN_USERNAME:-admin}
   MANDI_ADMIN_EMAIL: ${MANDI_ADMIN_EMAIL:-admin@example.invalid}
   MANDI_ADMIN_PASSWORD: ${MANDI_ADMIN_PASSWORD:?Run scripts/setup.sh}
@@ -119,6 +122,12 @@ services:
     <<: *backend
     image: mandi-backend:${RELEASE:-local}
     command: [python, manage.py, sync_registries]
+    healthcheck: {disable: true}
+
+  entities-worker:
+    <<: *backend
+    image: mandi-backend:${RELEASE:-local}
+    command: [python, manage.py, sync_entities]
     healthcheck: {disable: true}
 
   proxy:

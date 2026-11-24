@@ -126,12 +126,16 @@ export default function DashboardPage() {
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <Link
-                    className="entity-link"
-                    to={`/establishments/${submission.establishment_id}`}
-                  >
-                    {submission.establishment_name ?? "—"}
-                  </Link>
+                  {submission.establishment_id ? (
+                    <Link
+                      className="entity-link"
+                      to={`/establishments/${submission.establishment_id}`}
+                    >
+                      {submission.establishment_name ?? "—"}
+                    </Link>
+                  ) : (
+                    <span className="text-muted-foreground">{t("No establishment")}</span>
+                  )}
                 </TableCell>
                 <TableCell>{submission.checklist_name ?? "—"}</TableCell>
                 <TableCell>

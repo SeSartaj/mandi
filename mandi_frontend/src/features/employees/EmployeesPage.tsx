@@ -1,8 +1,7 @@
-import { EmployeeAccess } from "./EmployeeAccess";
-import { Button } from "@/components/ui/button";
 import { CreateButton } from "@/components/public/ActionButton";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import { Can } from "@/components/Can";
 import { PageSection } from "@/components/PageSection";
@@ -11,6 +10,7 @@ import { AppErrorState } from "@/components/public/AppErrorState";
 import { AppLoader } from "@/components/public/AppLoader";
 import AppTable from "@/components/public/AppTable";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import EmployeeForm from "@/features/employees/EmployeeForm";
 import { useApiQuery } from "@/features/shared/api";
@@ -24,7 +24,6 @@ export default function EmployeesPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useTablePageSize();
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Employee | null>(null);
   const data = useApiQuery<Page<Employee>>(["employees"], "/employees/", {
     page,
     page_size: pageSize,
@@ -76,7 +75,11 @@ export default function EmployeesPage() {
             <TableBody>
               {rows.map((employee) => (
                 <TableRow key={employee.id}>
-                  <TableCell>{employee.display_name || employee.username}</TableCell>
+                  <TableCell>
+                    <Link className="entity-link" to={`/employees/${employee.id}`}>
+                      {employee.display_name || employee.username}
+                    </Link>
+                  </TableCell>
                   <TableCell>{employee.username}</TableCell>
                   <TableCell>{employee.position || "—"}</TableCell>
                   <TableCell>
@@ -85,11 +88,9 @@ export default function EmployeesPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Can permission="accounts.change_user">
-                      <Button variant="outline" onClick={() => setEditing(employee)}>
-                        {t("Manage")}
-                      </Button>
-                    </Can>
+                    <Button variant="outline" asChild>
+                      <Link to={`/employees/${employee.id}`}>{t("Open")}</Link>
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -104,18 +105,6 @@ export default function EmployeesPage() {
           </AppTable>
         )}
       </PageSection>
-
-      <AppDialog
-        open={Boolean(editing)}
-        onOpenChange={(value) => {
-          if (!value) setEditing(null);
-        }}
-        title={t("Manage employee")}
-        size="md"
-        contentClassName="max-h-[90vh] overflow-y-auto"
-      >
-        {editing && <EmployeeAccess key={editing.id} employee={editing} />}
-      </AppDialog>
 
       <AppDialog
         open={open}

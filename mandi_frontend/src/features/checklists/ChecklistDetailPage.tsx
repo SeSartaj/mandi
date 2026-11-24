@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, RefreshCw, Search } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,7 +8,6 @@ import { Can } from "@/components/Can";
 import { PageSection } from "@/components/PageSection";
 import { AppErrorState } from "@/components/public/AppErrorState";
 import { AppLoader } from "@/components/public/AppLoader";
-import { AppSelect } from "@/components/public/AppSelect";
 import AppTable from "@/components/public/AppTable";
 import AppTitle from "@/components/public/AppTitle";
 import { SystemDateTime } from "@/components/public/SystemDateTime";
@@ -17,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { choiceLabel, pageCount } from "@/features/shared/labels";
+import { pageCount } from "@/features/shared/labels";
 import { useApiQuery } from "@/features/shared/api";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useListParams } from "@/hooks/useListParams";
@@ -46,7 +45,6 @@ export default function ChecklistDetailPage() {
   const calendar = useSystemCalendar();
   const search = params.get("search") ?? "";
   const debouncedSearch = useDebouncedValue(search, 300);
-  const establishmentId = params.get("establishment_id") ?? "";
   const dateFrom = params.get("date_from") ?? "";
   const dateTo = params.get("date_to") ?? "";
   const datesValid = validDateRange(dateFrom, dateTo);
@@ -59,23 +57,11 @@ export default function ChecklistDetailPage() {
     undefined,
     { enabled: checklist.data?.collection.status === "deployed" },
   );
-  const kind = checklist.data?.establishment_kind;
-  const establishments = useQuery({
-    queryKey: ["establishment-choices", kind],
-    enabled: Boolean(kind) && session.permissions.includes("establishments.view_establishment"),
-    queryFn: async () =>
-      (
-        await api.get<{ name: string; label: string }[]>("/integrations/establishment-choices/", {
-          params: { kind },
-        })
-      ).data,
-  });
   const submissions = useApiQuery<Page<Submission>>(
     ["checklist-submissions", id],
     `/checklists/${id}/collection-submissions/`,
     {
       search: debouncedSearch,
-      establishment_id: establishmentId,
       date_from: dateFrom,
       date_to: datesValid ? dateTo : "",
       page,
@@ -111,7 +97,7 @@ export default function ChecklistDetailPage() {
   const data = checklist.data!;
   const rows = submissions.data?.results ?? [];
   const count = submissions.data?.count ?? 0;
-  const filtersActive = Boolean(search || establishmentId || dateFrom || dateTo);
+  const filtersActive = Boolean(search || dateFrom || dateTo);
 
   return (
     <div className="space-y-6">
@@ -125,8 +111,6 @@ export default function ChecklistDetailPage() {
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
             <code>{data.code}</code>
-            <span>·</span>
-            <span>{t(choiceLabel(data.establishment_kind))}</span>
             <DeploymentBadge status={data.collection.status} />
           </span>
         }
@@ -176,20 +160,6 @@ export default function ChecklistDetailPage() {
                 placeholder={t("Search by establishment or submission id")}
               />
             </div>
-            <AppSelect
-              label={t("All establishments")}
-              value={establishmentId || "__all__"}
-              onChange={(value) => {
-                update({ establishment_id: value === "__all__" ? "" : String(value) });
-              }}
-              options={[
-                { value: "__all__", label: t("All establishments") },
-                ...(establishments.data ?? []).map((item) => ({
-                  value: item.name,
-                  label: item.label,
-                })),
-              ]}
-            />
             <SimpleDatePicker
               label={t("From date")}
               value={dateFrom}
@@ -212,7 +182,7 @@ export default function ChecklistDetailPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  update({ search: "", establishment_id: "", date_from: "", date_to: "" });
+                  update({ search: "", date_from: "", date_to: "" });
                 }}
               >
                 {t("Clear filters")}
@@ -264,12 +234,16 @@ export default function ChecklistDetailPage() {
                       </Link>
                     </TableCell>
                     <TableCell>
-                      <Link
-                        className="entity-link"
-                        to={`/establishments/${submission.establishment_id}`}
-                      >
-                        {submission.establishment_name ?? "—"}
-                      </Link>
+                      {submission.establishment_id ? (
+                        <Link
+                          className="entity-link"
+                          to={`/establishments/${submission.establishment_id}`}
+                        >
+                          {submission.establishment_name ?? "—"}
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground">{t("No establishment")}</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {submission.form_version ? (

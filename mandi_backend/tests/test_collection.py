@@ -1,4 +1,5 @@
 import io
+import uuid
 from unittest.mock import Mock, patch
 
 import requests
@@ -10,6 +11,7 @@ from apps.integrations.collection import provision, revoke, sync
 from apps.integrations.models import (
     CollectionSubmission,
     CollectorGrant,
+    EntityBinding,
     FormDeployment,
 )
 from apps.integrations.odk import CollectionError, OdkProvider
@@ -37,7 +39,9 @@ def workbook():
 
 
 @override_settings(
-    COLLECTION_PROVIDER="odk", ODK_PROJECT_ID="1", ODK_PUBLIC_URL="https://collect.test"
+    COLLECTION_PROVIDER="odk",
+    ODK_PROJECT_ID="1",
+    ODK_PUBLIC_URL="https://collect.test",
 )
 class CollectionWorkflowTests(TestCase):
     def setUp(self):
@@ -53,7 +57,6 @@ class CollectionWorkflowTests(TestCase):
         self.checklist = Checklist.objects.create(
             code="test",
             name="Checklist",
-            establishment_kind=EstablishmentType.objects.get(pk="pharmacy"),
             xlsform=SimpleUploadedFile("test.xlsx", workbook()),
         )
         self.deployment = FormDeployment.objects.create(
@@ -72,9 +75,11 @@ class CollectionWorkflowTests(TestCase):
     def tearDown(self):
         self.checklist.xlsform.delete(save=False)
 
+    @patch("apps.integrations.collection.sync_entities", return_value={"failed": 0})
+    @patch("apps.integrations.collection.ensure_dataset", return_value="establishments")
     @patch("apps.integrations.collection.provider")
-    def test_deployment_preserves_original_and_publishes_filtered_choices(
-        self, provider
+    def test_deployment_preserves_original_and_links_entity_list(
+        self, provider, ensure, sync_entities
     ):
         Establishment.objects.create(
             name="Factory", kind=EstablishmentType.objects.get(pk="factory")
@@ -83,17 +88,20 @@ class CollectionWorkflowTests(TestCase):
         self.checklist.xlsform.close()
         deploy_checklist(self.admin, self.checklist.pk)
         args = provider.return_value.deploy.call_args.args
+        kwargs = provider.return_value.deploy.call_args.kwargs
         prepared = load_workbook(io.BytesIO(args[1]))
         self.assertEqual(prepared["survey"].cell(2, 2).value, "establishment_id")
         self.assertEqual(
             prepared["settings"].cell(2, 1).value, f"mandi_checklist_{self.checklist.pk}"
         )
-        self.assertIn(b"Pharmacy", args[2])
-        self.assertNotIn(b"Factory", args[2])
+        self.assertEqual(kwargs["dataset"], "establishments")
+        ensure.assert_called_once()
+        sync_entities.assert_called_once_with("1", "establishments")
         with self.checklist.xlsform.open() as source:
             self.assertEqual(source.read(), original)
         self.deployment.refresh_from_db()
         self.assertEqual(self.deployment.status, "deployed")
+        self.assertEqual(self.deployment.entity_list, "establishments")
 
     def test_corrupt_workbook_returns_validation_error_and_retryable_status(self):
         self.checklist.xlsform.save(
@@ -153,34 +161,21 @@ class CollectionWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["archived"])
 
+    @patch("apps.integrations.collection.sync_entities", return_value={"failed": 0})
+    @patch("apps.integrations.collection.ensure_dataset", return_value="establishments")
     @patch("apps.integrations.collection.provider")
-    def test_structure_conflict_is_409_and_accepts_force(self, provider):
-        conflict = CollectionError("structure differs")
-        conflict.structure_conflict = True
-        provider.return_value.deploy.side_effect = conflict
-        response = self.client.post(
-            f"/api/v1/checklists/{self.checklist.pk}/deploy/", {}, format="json"
-        )
-        self.assertEqual(response.status_code, 409)
-        self.assertIn("structure differs", response.data["detail"])
-        self.assertFalse(provider.return_value.deploy.call_args.kwargs["force"])
-        provider.return_value.deploy.side_effect = None
-        response = self.client.post(
-            f"/api/v1/checklists/{self.checklist.pk}/deploy/",
-            {"force": True},
-            format="json",
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(provider.return_value.deploy.call_args.kwargs["force"])
-
-    @patch("apps.integrations.collection.provider")
-    def test_deploy_uses_the_selected_project(self, provider):
+    def test_deploy_uses_the_selected_project(self, provider, ensure, sync_entities):
         deploy_checklist(self.admin, self.checklist.pk, project_id=5)
         self.deployment.refresh_from_db()
         self.assertEqual(self.deployment.project_id, "5")
+        sync_entities.assert_called_once_with("5", "establishments")
 
+    @patch("apps.integrations.collection.sync_entities", return_value={"failed": 0})
+    @patch("apps.integrations.collection.ensure_dataset", return_value="establishments")
     @patch("apps.integrations.collection.provider")
-    def test_failure_is_retryable_and_concurrent_publish_is_rejected(self, provider):
+    def test_failure_is_retryable_and_concurrent_publish_is_rejected(
+        self, provider, ensure, sync_entities
+    ):
         provider.return_value.deploy.side_effect = CollectionError("offline")
         with self.assertRaises(ValidationError):
             deploy_checklist(self.admin, self.checklist.pk)
@@ -201,9 +196,14 @@ class CollectionWorkflowTests(TestCase):
         self, provider, request
     ):
         request.return_value.json.return_value = []
+        binding = EntityBinding.objects.create(
+            establishment=self.establishment,
+            project_id=self.deployment.project_id,
+            entity_uuid=uuid.uuid4(),
+        )
         row = {
             "__id": "uuid:one",
-            "establishment_id": str(self.establishment.pk),
+            "establishment_id": str(binding.entity_uuid),
             "result_pct": 80,
             "__system": {
                 "submissionDate": "2026-11-15T10:00:00Z",
@@ -216,11 +216,31 @@ class CollectionWorkflowTests(TestCase):
         counts = sync(self.admin)
         self.assertEqual(counts["created"], 1)
         submission = CollectionSubmission.objects.get()
+        self.assertEqual(submission.establishment, self.establishment)
+        self.assertEqual(submission.establishment_snapshot["name"], "Pharmacy")
         self.assertEqual(submission.form_version, "20261115120000")
         self.assertEqual(submission.data["section"]["answer"], "yes")
         sync(self.admin)
         self.assertEqual(CollectionSubmission.objects.count(), 1)
         self.assertEqual(sync(self.admin)["updated"], 1)
+
+    @patch("apps.integrations.odk.request")
+    @patch("apps.integrations.collection.provider")
+    def test_submission_without_establishment_is_accepted(self, provider, request):
+        request.return_value.json.return_value = []
+        row = {
+            "__id": "uuid:no-establishment",
+            "__system": {
+                "submissionDate": "2026-11-15T10:00:00Z",
+                "formVersion": "1",
+            },
+            "question": "answer",
+        }
+        provider.return_value.submissions.return_value = [OdkProvider.normalize(row)]
+        counts = sync(self.admin)
+        self.assertEqual(counts["created"], 1)
+        submission = CollectionSubmission.objects.get()
+        self.assertIsNone(submission.establishment)
 
     @patch("apps.integrations.odk.request")
     @patch("apps.integrations.collection.provider")
@@ -234,40 +254,178 @@ class CollectionWorkflowTests(TestCase):
                 {"__id": "bad", "establishment_id": "not-a-uuid"},
                 {
                     "__id": "unknown",
-                    "establishment_id": str(self.establishment.pk),
+                    "establishment_id": str(uuid.uuid4()),
                     "__system": {"submissionDate": "2026-11-15T10:00:00Z"},
                 },
             ]
         ]
         counts = sync(self.admin)
-        self.assertEqual(counts["skipped"], 1)
-        self.assertEqual(counts["created"], 1)
-        self.assertEqual(CollectionSubmission.objects.count(), 1)
+        self.assertEqual(counts["skipped"], 2)
+        self.assertEqual(CollectionSubmission.objects.count(), 0)
 
     @patch("apps.integrations.collection.provider")
     def test_revoke_before_deactivation_and_token_not_persisted(self, provider):
         with self.assertRaises(ValidationError):
             update_employee(self.admin, self.collector.pk, {"is_active": False})
-        provider.return_value.revoke_collector.side_effect = CollectionError("offline")
+        provider.return_value.delete_collector.side_effect = CollectionError("offline")
         with self.assertRaises(CollectionError):
             revoke(self.admin, self.grant)
         self.grant.refresh_from_db()
         self.assertTrue(self.grant.active)
-        provider.return_value.revoke_collector.side_effect = None
+        provider.return_value.delete_collector.side_effect = None
         revoke(self.admin, self.grant)
-        provider.return_value.provision_collector.return_value = {
+        provider.return_value.create_collector.return_value = {
             "id": "124",
-            "configuration": {
-                "server_url": "https://collect.test/v1/key/private-token/projects/1"
-            },
+            "token": "private-token",
         }
-        result = provision(self.admin, self.collector, self.checklist.pk)
-        self.assertIn("private-token", result["server_url"])
+        provider.return_value.collector_configuration.return_value = {
+            "server_url": "https://collect.test/v1/key/private-token/projects/1"
+        }
+        result = provision(self.admin, self.collector, [self.checklist.pk])
+        self.assertIn("private-token", result["credentials"][0]["server_url"])
         self.assertNotIn("token", [field.name for field in CollectorGrant._meta.fields])
-        revoke(self.admin, CollectorGrant.objects.get(pk=result["id"]))
+        provider.return_value.create_collector.assert_called_once_with("1", "Collector")
+        provider.return_value.assign_collector.assert_called_once()
+        revoke(self.admin, CollectorGrant.objects.get(user=self.collector, active=True))
+        provider.return_value.delete_collector.assert_called_with("1", "124")
         update_employee(self.admin, self.collector.pk, {"is_active": False})
         self.collector.refresh_from_db()
         self.assertFalse(self.collector.is_active)
+
+    @patch("apps.integrations.collection.provider")
+    def test_one_credential_can_cover_multiple_checklists_in_a_project(self, provider):
+        other = Checklist.objects.create(
+            code="test-2",
+            name="Second checklist",
+            xlsform=SimpleUploadedFile("test2.xlsx", workbook()),
+        )
+        self.addCleanup(other.xlsform.delete, save=False)
+        FormDeployment.objects.create(
+            checklist=other,
+            provider="odk",
+            project_id="1",
+            form_id="mandi_2",
+            status="deployed",
+        )
+        worker = get_user_model().objects.create_user(
+            username="multi-collector", display_name="Multi Collector"
+        )
+        provider.return_value.create_collector.return_value = {
+            "id": "200",
+            "token": "shared-token",
+        }
+        provider.return_value.collector_configuration.return_value = {
+            "server_url": "https://collect.test/v1/key/shared-token/projects/1"
+        }
+
+        result = provision(self.admin, worker, [self.checklist.pk, other.pk])
+
+        self.assertEqual(provider.return_value.create_collector.call_count, 1)
+        self.assertEqual(provider.return_value.assign_collector.call_count, 2)
+        self.assertEqual(len(result["credentials"]), 1)
+        self.assertEqual(len(result["credentials"][0]["checklists"]), 2)
+        grants = list(CollectorGrant.objects.filter(user=worker, active=True))
+        self.assertEqual(len(grants), 2)
+        self.assertEqual({grant.remote_id for grant in grants}, {"200"})
+
+        revoke(self.admin, grants[0])
+        provider.return_value.unassign_collector.assert_called_once()
+        provider.return_value.delete_collector.assert_not_called()
+        self.assertEqual(
+            CollectorGrant.objects.filter(user=worker, active=True).count(), 1
+        )
+
+        revoke(self.admin, grants[1])
+        provider.return_value.delete_collector.assert_called_once_with("1", "200")
+        self.assertEqual(
+            CollectorGrant.objects.filter(user=worker, active=True).count(), 0
+        )
+
+    @patch("apps.integrations.collection.provider")
+    def test_checklists_in_different_projects_get_separate_credentials(self, provider):
+        other = Checklist.objects.create(
+            code="test-3",
+            name="Other project checklist",
+            xlsform=SimpleUploadedFile("test3.xlsx", workbook()),
+        )
+        self.addCleanup(other.xlsform.delete, save=False)
+        FormDeployment.objects.create(
+            checklist=other,
+            provider="odk",
+            project_id="2",
+            form_id="mandi_3",
+            status="deployed",
+        )
+        worker = get_user_model().objects.create_user(
+            username="cross-project", display_name="Cross Project"
+        )
+        provider.return_value.create_collector.side_effect = [
+            {"id": "301", "token": "token-1"},
+            {"id": "302", "token": "token-2"},
+        ]
+        provider.return_value.collector_configuration.side_effect = (
+            lambda project_id, token: {
+                "server_url": f"https://collect.test/v1/key/{token}/projects/{project_id}"
+            }
+        )
+
+        result = provision(self.admin, worker, [self.checklist.pk, other.pk])
+
+        self.assertEqual(provider.return_value.create_collector.call_count, 2)
+        self.assertEqual(provider.return_value.assign_collector.call_count, 2)
+        self.assertEqual(
+            {credential["project_id"] for credential in result["credentials"]},
+            {1, 2},
+        )
+        self.assertEqual(
+            set(
+                CollectorGrant.objects.filter(user=worker, active=True).values_list(
+                    "remote_id", flat=True
+                )
+            ),
+            {"301", "302"},
+        )
+
+    @patch("apps.integrations.collection.provider")
+    def test_collection_access_api_accepts_multiple_checklists(self, provider):
+        other = Checklist.objects.create(
+            code="api-second",
+            name="API second checklist",
+            xlsform=SimpleUploadedFile("api-second.xlsx", workbook()),
+        )
+        self.addCleanup(other.xlsform.delete, save=False)
+        FormDeployment.objects.create(
+            checklist=other,
+            provider="odk",
+            project_id="1",
+            form_id="mandi_api_second",
+            status="deployed",
+        )
+        worker = get_user_model().objects.create_user(
+            username="api-collector", display_name="API collector"
+        )
+        provider.return_value.create_collector.return_value = {
+            "id": "700",
+            "token": "api-token",
+        }
+        provider.return_value.collector_configuration.return_value = {
+            "server_url": "https://collect.test/v1/key/api-token/projects/1"
+        }
+        response = self.client.post(
+            f"/api/v1/employees/{worker.pk}/collection-access/",
+            {"checklist_ids": [self.checklist.pk, other.pk]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(response.data["credentials"]), 1)
+        self.assertEqual(len(response.data["credentials"][0]["checklists"]), 2)
+        listing = self.client.get(
+            f"/api/v1/employees/{worker.pk}/collection-access/"
+        )
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(len(listing.data), 1)
+        self.assertEqual(listing.data[0]["project_id"], 1)
+        self.assertEqual(len(listing.data[0]["checklists"]), 2)
 
     def test_checklist_scope_protects_submissions_and_downloads(self):
         self.collector.restrict_checklist_access = True
@@ -341,14 +499,31 @@ class OdkAdapterTests(SimpleTestCase):
         self.assertIsNotNone(remote.submitted_at)
 
     @patch("apps.integrations.odk.request")
+    def test_form_versions_accepts_list_and_paginated_responses(self, request):
+        deployment = Mock(project_id="1", form_id="form")
+        request.return_value.json.return_value = [
+            {"version": "2", "publishedAt": "2026-11-16T10:00:00Z"},
+            {"version": "1", "publishedAt": "2026-11-15T10:00:00Z"},
+        ]
+        self.assertEqual(
+            [item["version"] for item in OdkProvider().form_versions(deployment)],
+            ["2", "1"],
+        )
+        request.return_value.json.return_value = {
+            "value": [{"version": "3", "publishedAt": None}]
+        }
+        self.assertEqual(
+            [item["version"] for item in OdkProvider().form_versions(deployment)],
+            ["3"],
+        )
+
+    @patch("apps.integrations.odk.request")
     def test_revocation_is_idempotent_after_external_deletion(self, request):
         cause = requests.HTTPError(response=Mock(status_code=404))
         error = CollectionError("Missing")
         error.__cause__ = cause
         request.side_effect = error
-        OdkProvider().revoke_collector(
-            Mock(remote_id="123", deployment=Mock(project_id="1"))
-        )
+        OdkProvider().delete_collector("1", "123")
 
     @patch("apps.integrations.odk.request")
     def test_pagination_never_sends_credentials_to_another_host(self, request):
@@ -372,7 +547,7 @@ class OdkAdapterTests(SimpleTestCase):
         error.__cause__ = cause
         request.side_effect = error
         with self.assertRaises(CollectionError):
-            OdkProvider().deploy(Mock(project_id="1", form_id="form"), b"file", b"csv")
+            OdkProvider().deploy(Mock(project_id="1", form_id="form"), b"file")
         self.assertEqual(request.call_count, 1)
 
     @patch("apps.integrations.odk.request")
@@ -384,7 +559,11 @@ class OdkAdapterTests(SimpleTestCase):
         attachment_response = Mock()
         attachment_response.json.return_value = [{"name": "establishments.csv"}]
         request.side_effect = [error, Mock(), attachment_response, Mock(), Mock()]
-        OdkProvider().deploy(Mock(project_id="1", form_id="my/form"), b"xls", b"csv")
+        OdkProvider().deploy(
+            Mock(project_id="1", form_id="my/form"),
+            b"xls",
+            dataset="establishments",
+        )
         calls = request.call_args_list
         self.assertEqual(calls[1].args, ("POST", "projects/1/forms"))
         self.assertEqual(calls[1].kwargs["params"], {"publish": "false"})
@@ -401,7 +580,7 @@ class OdkAdapterTests(SimpleTestCase):
         error.__cause__ = requests.HTTPError(response=warning)
         request.side_effect = [Mock(), error]
         with self.assertRaises(CollectionError) as raised:
-            OdkProvider().deploy(Mock(project_id="1", form_id="form"), b"xls", b"csv")
+            OdkProvider().deploy(Mock(project_id="1", form_id="form"), b"xls")
         message = str(raised.exception)
         self.assertIn("label", message)
         self.assertIn("new checklist", message)
@@ -425,7 +604,7 @@ class OdkAdapterTests(SimpleTestCase):
         attachments.json.return_value = []
         request.side_effect = [Mock(), error, Mock(), attachments, Mock()]
         OdkProvider().deploy(
-            Mock(project_id="1", form_id="form"), b"xls", b"csv", force=True
+            Mock(project_id="1", form_id="form"), b"xls", force=True
         )
         retried = [
             call
