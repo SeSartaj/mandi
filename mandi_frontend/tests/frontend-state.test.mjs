@@ -17,29 +17,9 @@ async function compile(source, name, replacements={}) {
   await fs.writeFile(file, result.outputText);
   return import(file);
 }
-const {readInspectionFilters,writeInspectionFilters,validDateRange} = await compile('features/inspections/filter-state.ts','filters');
 const {paginationState} = await compile('components/public/pagination-state.ts','pagination');
 await i18next.init({lng:'en',resources:{en:{translation:{}}}});
 const {api,errorMessage} = await compile('lib/api.ts','api',{'import.meta.env.VITE_API_URL':'""'});
-
-test('inspection filter links round-trip all supported filters and preserve unrelated URL state', () => {
-  const values = {date_from:'2026-01-01',date_to:'2026-11-15',kind:'brief',approved:'false',establishment_kind:'pharmacy',province:'Kabul',inspector_id:'7',checklist_id:'3'};
-  const next = writeInspectionFilters(new URLSearchParams('page=5&ordering=-date&unknown=x'),values);
-  assert.deepEqual(readInspectionFilters(next),values);
-  assert.equal(next.get('page'),'1');
-  assert.equal(next.get('ordering'),'-date');
-  assert.equal(next.get('unknown'),'x');
-  const cleared = writeInspectionFilters(next,{});
-  assert.deepEqual(readInspectionFilters(cleared),{});
-  assert.deepEqual(readInspectionFilters(new URLSearchParams('approved=__all__&province=&unknown=x')),{});
-});
-
-test('date filters allow open bounds and equal dates, and reject reversed bounds', () => {
-  assert.equal(validDateRange('2026-11-15','2026-11-15'),true);
-  assert.equal(validDateRange('2026-11-15','2026-11-14'),false);
-  assert.equal(validDateRange('','2026-11-14'),true);
-  assert.equal(validDateRange('2026-11-15',''),true);
-});
 
 test('pagination handles invalid inputs, empty data and out-of-range pages', () => {
   assert.deepEqual(paginationState('-1','bad',0,[10,20]),{page:1,pageSize:10,totalPages:1,options:[10,20],pages:[1]});

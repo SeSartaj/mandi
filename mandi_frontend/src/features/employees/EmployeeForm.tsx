@@ -9,12 +9,13 @@ import { AppErrorState } from "@/components/public/AppErrorState";
 import { Can } from "@/components/Can";
 import { DialogClose } from "@/components/ui/dialog";
 import CustomForm from "@/components/ui/custom/CustomForm";
-import FormInput from "@/components/ui/custom/CustomInput";
+import FormInput, { EmailInput, PasswordInput } from "@/components/ui/custom/CustomInput";
 import { CustomSearchSelector } from "@/components/ui/custom/CustomSearchSelector";
 import { api, errorMessage } from "@/lib/api";
+import { notify } from "@/lib/notify";
 
 type EmployeeValues = {
-  username: string;
+  email: string;
   display_name: string;
   position: string;
   password: string;
@@ -26,7 +27,7 @@ export default function EmployeeForm({ onClose }: { onClose: () => void }) {
   const client = useQueryClient();
   const form = useForm<EmployeeValues>({
     defaultValues: {
-      username: "",
+      email: "",
       display_name: "",
       position: "",
       password: "",
@@ -48,9 +49,14 @@ export default function EmployeeForm({ onClose }: { onClose: () => void }) {
     mutationFn: (values: EmployeeValues) =>
       api.post("/employees/", { ...values, group_ids: values.group_ids.map(Number) }),
     onSuccess: () => {
+      notify.success(t("{{entity}} created.", { entity: t("Employee") }));
       client.invalidateQueries();
       onClose();
     },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
 
   return (
@@ -66,18 +72,12 @@ export default function EmployeeForm({ onClose }: { onClose: () => void }) {
         label={t("Full name")}
         rules={{ required: t("Required") }}
       />
-      <FormInput
-        form={form}
-        name="username"
-        label={t("Username")}
-        rules={{ required: t("Required") }}
-      />
+      <EmailInput form={form} name="email" label={t("Email")} rules={{ required: t("Required") }} />
       <FormInput form={form} name="position" label={t("Position")} />
-      <FormInput
+      <PasswordInput
         form={form}
         name="password"
         label={t("Password")}
-        type="password"
         autoComplete="new-password"
         rules={{ required: t("Required") }}
       />

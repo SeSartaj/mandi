@@ -21,10 +21,14 @@ def require(actor, permission):
         raise PermissionDenied("You do not have permission to perform this action.")
 
 
-def login(username, password):
-    user = authenticate(username=username, password=password)
+def login(email, password):
+    email = (email or "").strip().lower()
+    matches = list(get_user_model().objects.filter(email__iexact=email)) if email else []
+    if len(matches) != 1:
+        raise AuthenticationFailed("Invalid email or password.")
+    user = authenticate(username=matches[0].username, password=password)
     if user is None:
-        raise AuthenticationFailed("Invalid username or password.")
+        raise AuthenticationFailed("Invalid email or password.")
     token, _ = Token.objects.get_or_create(user=user)
     return token, user
 
@@ -61,9 +65,10 @@ def create_employee(actor, data):
     groups = list(Group.objects.filter(pk__in=group_ids, name__startswith="Mandi "))
     if len(groups) != len(set(group_ids)):
         raise ValidationError({"group_ids": "Select known Mandi permission groups."})
-    if get_user_model().objects.filter(username=values["username"]).exists():
-        raise ValidationError({"username": "This username is already in use."})
-    user = get_user_model()(**values)
+    email = values.pop("email").strip().lower()
+    if get_user_model().objects.filter(email__iexact=email).exists():
+        raise ValidationError({"email": "This email address is already in use."})
+    user = get_user_model()(username=email, email=email, **values)
     try:
         validate_password(password, user)
     except DjangoValidationError as exc:
@@ -128,6 +133,19 @@ def update_employee(actor, pk, data):
     for key in ("display_name", "position", "is_active", "restrict_checklist_access"):
         if key in data:
             setattr(user, key, data[key])
+    if "email" in data:
+        email = data["email"].strip().lower()
+        if (
+            get_user_model()
+            .objects.filter(email__iexact=email)
+            .exclude(pk=user.pk)
+            .exists()
+        ):
+            raise ValidationError({"email": "This email address is already in use."})
+        user.email = email
+        # New accounts use the email as their Django username; keep them in sync
+        # so admin and CLI tools show the same sign-in identifier.
+        user.username = email
     if "password" in data:
         try:
             validate_password(data["password"], user)

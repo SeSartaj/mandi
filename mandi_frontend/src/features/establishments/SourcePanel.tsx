@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import type { Establishment, SourceLink } from "@/lib/api";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { api, errorMessage } from "@/lib/api";
+import { notify } from "@/lib/notify";
 
 type Candidate = {
   id: string;
@@ -68,11 +69,20 @@ export default function SourcePanel({
       id
         ? api.post(`/establishments/${establishment.id}/sources/${source}/`, { external_id: id })
         : api.delete(`/establishments/${establishment.id}/sources/${source}/`),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      notify.success(
+        id
+          ? t("{{entity}} connected.", { entity: t("Source link") })
+          : t("{{entity}} disconnected.", { entity: t("Source link") }),
+      );
       client.invalidateQueries();
       setOpen(false);
       setDisconnecting(false);
     },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
 
   return (

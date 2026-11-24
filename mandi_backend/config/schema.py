@@ -117,6 +117,10 @@ def openapi_document():
         paths.setdefault(path, {})[method] = op
 
     route("/registry/sync/", "get", "Automatic registry sync status and per-category progress", {"type": "object"})
+    route("/registry/systems/", "get", "Active external systems with connection and sync state", {"type": "object"})
+    route("/registry/systems/{code}/sync/", "post", "Run one bounded sync batch for an external system", {"type": "object"},
+          {"type": "object", "properties": {"page_size": {"type": "integer"}}})
+    route("/registry/systems/{code}/full-sync/", "post", "Queue one complete sync pass for an external system", {"type": "object"})
     route("/registry/", "get", "Active establishment types and external systems", {"type": "object"})
     route("/registry/import/", "post", "Import an identity from its primary registry (idempotent by source and external ID)", ref("EstablishmentSerializer"),
           {"type": "object", "required": ["source", "external_id", "kind"], "properties": {key: {"type": "string"} for key in ["source", "external_id", "kind"]}}, code=201)
@@ -177,7 +181,7 @@ def openapi_document():
     route(
         "/establishments/{pk}/",
         "get",
-        "Establishment details and separate source links",
+        "Establishment details, source links, and inspection counters",
         ref("EstablishmentSerializer"),
     )
     patch_schema = mapper.map_serializer(api.EstablishmentSerializer())

@@ -84,7 +84,6 @@ class SourceLink(models.Model):
         SURVEY = "survey", "Survey"
         ARCHIVE = "archive", "Archive"
         LICENSING = "licensing", "Licensing"
-        REGISTRATION = "registration", "Registration"
 
     establishment = models.ForeignKey(
         Establishment, on_delete=models.CASCADE, related_name="source_links"
@@ -122,3 +121,39 @@ class RegistrySyncCursor(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["source", "kind"], name="registry_sync_cursor_unique")]
+
+
+class RegistrySyncRequest(models.Model):
+    """A queued complete pass, executed by the registry worker."""
+
+    class State(models.TextChoices):
+        PENDING = "pending", "Pending"
+        RUNNING = "running", "Running"
+        DONE = "done", "Done"
+        FAILED = "failed", "Failed"
+
+    source = models.ForeignKey(
+        ExternalSystem, on_delete=models.CASCADE, related_name="sync_requests"
+    )
+    state = models.CharField(max_length=20, choices=State.choices, default=State.PENDING)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    result = models.JSONField(default=dict)
+    error = models.CharField(max_length=250, blank=True)
+
+    class Meta:
+        ordering = ["requested_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source"],
+                condition=models.Q(state__in=["pending", "running"]),
+                name="one_active_registry_sync_request",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.source_id}: {self.state}"

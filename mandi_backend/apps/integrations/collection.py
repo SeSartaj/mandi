@@ -8,7 +8,7 @@ from zipfile import BadZipFile
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Max, Q
 from django.utils import timezone
 from openpyxl import load_workbook
 from rest_framework.exceptions import APIException, ValidationError
@@ -191,6 +191,19 @@ def submissions(
     if date_to:
         qs = qs.filter(submitted_at__date__lte=date_to)
     return qs
+
+
+def statistics(actor, establishment_id):
+    """Inspection counters for one establishment, scoped to the actor's checklists."""
+    qs = submissions(actor, establishment_id=establishment_id)
+    now = timezone.localtime()
+    year_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    totals = qs.aggregate(total=Count("pk"), last=Max("submitted_at"))
+    return {
+        "total": totals["total"] or 0,
+        "this_year": qs.filter(submitted_at__gte=year_start).count(),
+        "last_submitted_at": totals["last"],
+    }
 
 
 def form_versions(actor, checklist_id):

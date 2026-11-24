@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { api, errorMessage } from "@/lib/api";
+import { notify } from "@/lib/notify";
 import type { Checklist, EmployeeDetail } from "@/lib/api";
 
 type PermissionGroup = { id: number; name: string };
@@ -46,6 +47,7 @@ export function EmployeeEditDialog({ employee, checklists, projectNames, onClose
   const { t } = useTranslation();
   const client = useQueryClient();
   const [name, setName] = useState(employee.display_name);
+  const [email, setEmail] = useState(employee.email);
   const [position, setPosition] = useState(employee.position);
   const [password, setPassword] = useState("");
   const [active, setActive] = useState(employee.is_active);
@@ -67,6 +69,7 @@ export function EmployeeEditDialog({ employee, checklists, projectNames, onClose
   const save = useMutation({
     mutationFn: async () => {
       const values: Record<string, unknown> = { display_name: name, position };
+      if (email !== employee.email) values.email = email;
       if (password) values.password = password;
       if (active !== employee.is_active) values.is_active = active;
       if (JSON.stringify(groups) !== JSON.stringify(employee.groups)) values.group_ids = groups;
@@ -77,10 +80,15 @@ export function EmployeeEditDialog({ employee, checklists, projectNames, onClose
       return api.patch<EmployeeDetail>(`/employees/${employee.id}/`, values);
     },
     onSuccess: (response) => {
+      notify.success(t("{{entity}} updated.", { entity: t("Employee") }));
       client.setQueryData(["employee", String(employee.id)], response.data);
       client.invalidateQueries({ queryKey: ["employees"] });
       onClose();
     },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
 
   const toggle = (list: number[], id: number) =>
@@ -104,6 +112,15 @@ export function EmployeeEditDialog({ employee, checklists, projectNames, onClose
             <label className="space-y-1 text-sm">
               <span className="font-medium">{t("Full name")}</span>
               <Input value={name} onChange={(event) => setName(event.target.value)} />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">{t("Email")}</span>
+              <Input
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
             </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">{t("Position")}</span>

@@ -64,7 +64,7 @@ LibreOffice/ffmpeg for Mandi, so it takes longer than later code deployments.
    the inspections project, creates the initial Mandi administrator, and starts
    periodic submission sync. No demo records are created and no existing volumes
    are deleted.
-5. Open `https://MANDI_DOMAIN`. Log in with `MANDI_ADMIN_USERNAME` and the generated
+5. Open `https://MANDI_DOMAIN`. Log in with `MANDI_ADMIN_EMAIL` and the generated
    `MANDI_ADMIN_PASSWORD` from `.env`. Central's own administrator logs in at
    `https://ODK_DOMAIN` with `ODK_ADMIN_EMAIL` / `ODK_ADMIN_PASSWORD`.
 
@@ -264,4 +264,4 @@ issuance on a real server and collection from a physical device still need an
 acceptance run. Django's optional HSTS subdomain/preload advisories remain;
 deployment checks fail on errors, without requiring either policy.
 
-See [registry configuration and testing](registry-and-evidence.md) to enable automatic establishment creation and identity refresh from the Registration API. Both workers are included in the same Compose project and updated by `scripts/deploy.sh`.
+See [registry configuration and testing](registry-and-evidence.md) to enable automatic establishment creation and identity refresh from the Licensing API. Both workers are included in the same Compose project and updated by `scripts/deploy.sh`.

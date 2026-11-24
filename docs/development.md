@@ -13,7 +13,7 @@ Run commands from the repository root. You need Docker Engine with the Compose p
 
 Open:
 
-- Mandi: https://mandi.localhost:8443 — sign in as `MANDI_ADMIN_USERNAME` with `MANDI_ADMIN_PASSWORD` from `.env`.
+- Mandi: https://mandi.localhost:8443 — sign in with `MANDI_ADMIN_EMAIL` and `MANDI_ADMIN_PASSWORD` from `.env`.
 - Central: https://collect.localhost:8443 — sign in as `ODK_ADMIN_EMAIL` with `ODK_ADMIN_PASSWORD` from `.env`.
 - ODK Collect server URL: the credential shown once under **Employees → Manage → ODK Collect access**. The device must resolve `collect.localhost` and trust the local CA.
 
@@ -80,7 +80,7 @@ npm --prefix mandi_frontend ci
 npm --prefix mandi_frontend run dev -- --host 127.0.0.1
 ```
 
-Open http://127.0.0.1:5174 and sign in with the superuser you created. The frontend API defaults to `/api/v1` on the frontend origin. Vite proxies `/api` and `/media` to Django at `127.0.0.1:8000`, so browsers on other devices do not call their own localhost. Override `VITE_API_URL` in `mandi_frontend/.env` for a separate API host; production hosting must forward `/api` and `/media` to Django. The backend loads its `.env` automatically; process environment variables take precedence.
+Open http://127.0.0.1:5174 and sign in with the email address of the superuser you created. The frontend API defaults to `/api/v1` on the frontend origin. Vite proxies `/api` and `/media` to Django at `127.0.0.1:8000`, so browsers on other devices do not call their own localhost. Override `VITE_API_URL` in `mandi_frontend/.env` for a separate API host; production hosting must forward `/api` and `/media` to Django. The backend loads its `.env` automatically; process environment variables take precedence.
 
 PostgreSQL is required when `DJANGO_DEBUG=0`. The database-only Compose file used by earlier review builds has been removed; use the full stack above for PostgreSQL and ODK collection.
 
@@ -261,7 +261,7 @@ To import every active Licensing category (`company`, `factory`, `pharmacy`,
 ```
 
 Explicit `--once`/`--full` runs work even when continuous polling
-(`REGISTRATION_SYNC_ENABLED`) is off. The import is idempotent: rerunning it
+(`LICENSING_SYNC_ENABLED`) is off. The import is idempotent: rerunning it
 updates changed identities and reports unchanged records. Because Licensing is
 primary, local edits to imported names and locations are blocked; use the
 refresh action or rerun the import instead.
@@ -333,7 +333,10 @@ the response finishes.
 The supplied API contract is saved in [licensing-api-reference.md](licensing-api-reference.md).
 Set `LICENSING_BASE_URL`, `LICENSING_REGISTRATION_API_KEY`, and optionally
 `LICENSING_TIMEOUT` in `mandi_backend/.env` (and in the root `.env` for Compose).
-Production currently points at `http://192.168.1.4:8008`; the key is stored only
+Automatic sync is tuned with `LICENSING_SYNC_ENABLED`, `LICENSING_SYNC_INTERVAL`,
+and `LICENSING_SYNC_PAGE_SIZE`. The deployed Licensing origin is
+`http://192.168.1.4:8008`; an older backup contains the previous developer-local
+value `http://10.10.0.125:8001`, which must not be used. The key is stored only
 in the ignored server environment. Restart the backend after changing
 environment settings.
 

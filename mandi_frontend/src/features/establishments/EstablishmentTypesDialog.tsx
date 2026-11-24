@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useApiQuery } from "@/features/shared/api";
 import { api, errorMessage, type EstablishmentType } from "@/lib/api";
+import { notify } from "@/lib/notify";
 
 export default function EstablishmentTypesDialog({
   open,
@@ -38,10 +39,15 @@ export default function EstablishmentTypesDialog({
     mutationFn: () =>
       api.post("/establishment-types/", { code: code.trim(), name: name.trim() }),
     onSuccess: () => {
+      notify.success(t("{{entity}} created.", { entity: t("Establishment type") }));
       setCode("");
       setName("");
       invalidate();
     },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
   const update = useMutation({
     mutationFn: ({
@@ -52,6 +58,13 @@ export default function EstablishmentTypesDialog({
       name?: string;
       is_active?: boolean;
     }) => api.patch(`/establishment-types/${value}/`, body),
+    onSuccess: () => {
+      notify.success(t("{{entity}} updated.", { entity: t("Establishment type") }));
+    },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
     onSettled: () => {
       setEditCode(null);
       invalidate();

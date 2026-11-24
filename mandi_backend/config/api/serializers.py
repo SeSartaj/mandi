@@ -12,7 +12,7 @@ from rest_framework import serializers
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = get_user_model()
-        fields = ("id", "username", "display_name", "position", "is_active", "is_staff", "groups", "restrict_checklist_access", "allowed_checklists")
+        fields = ("id", "username", "email", "display_name", "position", "is_active", "is_staff", "groups", "restrict_checklist_access", "allowed_checklists")
 
 
 class EmployeeDetailSerializer(UserSerializer):
@@ -49,7 +49,7 @@ class EmployeeDetailSerializer(UserSerializer):
 
 
 class EmployeeInput(serializers.Serializer):
-    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField(max_length=150)
     display_name = serializers.CharField(max_length=200)
     position = serializers.CharField(max_length=200, allow_blank=True, default="")
     password = serializers.CharField(write_only=True)
@@ -60,7 +60,7 @@ class EmployeeInput(serializers.Serializer):
 
 
 class LoginInput(serializers.Serializer):
-    username = serializers.CharField()
+    email = serializers.EmailField(max_length=150)
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 
 
@@ -233,6 +233,7 @@ class SubmissionFilters(serializers.Serializer):
 
 
 class EmployeeUpdate(serializers.Serializer):
+    email = serializers.EmailField(max_length=150, required=False)
     display_name = serializers.CharField(max_length=200, required=False)
     position = serializers.CharField(max_length=200, allow_blank=True, required=False)
     password = serializers.CharField(write_only=True, trim_whitespace=False, required=False)

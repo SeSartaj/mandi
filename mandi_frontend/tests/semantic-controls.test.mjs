@@ -23,7 +23,7 @@ await i18next.use(initReactI18next).init({lng:'en',resources:{en:{translation:{}
 await compile('lib/utils.ts','utils');
 await compile('components/ui/button.tsx','button',{'@/lib/utils':'./utils.mjs'});
 const {FieldSupport} = await compile('components/ui/field-support.tsx','support',{'@/lib/utils':'./utils.mjs'});
-await compile('components/ui/input.tsx','input',{'@/lib/utils':'./utils.mjs'});
+const {Input} = await compile('components/ui/input.tsx','input',{'@/lib/utils':'./utils.mjs'});
 await compile('components/ui/label.tsx','label',{'@/lib/utils':'./utils.mjs'});
 const {FormField} = await compile('components/FormField.tsx','field',{
   '@/components/ui/field-support':'./support.mjs',
@@ -85,6 +85,19 @@ test('empty, help and error states always render the same support slot; errors r
     else assert.doesNotMatch(html,/role="alert"/);
   }
   assert.match(render(FieldSupport),/aria-hidden="true"/);
+});
+
+test('email and password inputs are semantic and always LTR',()=>{
+  for(const type of ['email','password','tel','url']){
+    const html=render(Input,{type,dir:'rtl'});
+    assert.match(html,/dir="ltr"/);
+    assert.match(html,/autocapitalize="none"/i);
+    assert.match(html,/autocorrect="off"/i);
+    assert.match(html,/spellcheck="false"/i);
+  }
+  assert.match(render(Input,{type:'email'}),/inputmode="email"/i);
+  assert.match(render(Input,{type:'tel'}),/inputmode="tel"/i);
+  assert.match(render(Input,{type:'text',dir:'rtl'}),/dir="rtl"/);
 });
 
 test('shared fields describe the visible message and retain the slot even when opt-out is passed',()=>{

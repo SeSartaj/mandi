@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 export function NavUser() {
   const { user, signout } = useSession();
   const { t } = useTranslation();
-  const name = user.display_name || user.username;
+  const name = user.display_name || user.email;
   return (
     <SidebarMenu className="w-full">
       <SidebarMenuItem>
@@ -28,13 +28,13 @@ export function NavUser() {
               <div className="grid min-w-0 flex-1 text-start text-sm leading-tight">
                 <span className="truncate font-medium">{name}</span>
                 <span className="text-muted-foreground truncate text-xs">
-                  {user.position || user.username}
+                  {user.position || user.email}
                 </span>
               </div>
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top">
-            <DropdownMenuLabel>{user.username}</DropdownMenuLabel>
+            <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => void signout()}>
               <LogOut />

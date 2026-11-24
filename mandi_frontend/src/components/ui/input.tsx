@@ -12,18 +12,34 @@ type InputProps = React.ComponentProps<"input"> & {
   normalizeDigits?: boolean;
 };
 
+/** Text-like values that are always written left-to-right, even in RTL UIs. */
+function forcesLtr(type: React.HTMLInputTypeAttribute | undefined) {
+  return type === "email" || type === "password" || type === "tel" || type === "url";
+}
+
+function semanticInputMode(type: React.HTMLInputTypeAttribute | undefined) {
+  if (type === "email") return "email" as const;
+  if (type === "tel") return "tel" as const;
+  if (type === "url") return "url" as const;
+  return undefined;
+}
+
 function Input({
   className,
   type,
   inputMode,
   normalizeDigits = false,
   dir,
+  autoCapitalize,
+  autoCorrect,
+  spellCheck,
   value,
   defaultValue,
   onChange,
   ...props
 }: InputProps) {
   const isNumberInput = type === "number";
+  const ltr = forcesLtr(type);
   const shouldNormalizeDigits = isNumberInput || normalizeDigits;
   const normalizedValue =
     isNumberInput && value !== undefined ? normalizeNumericValue(String(value)) : value;
@@ -42,8 +58,11 @@ function Input({
   return (
     <input
       type={type}
-      inputMode={isNumberInput ? (inputMode ?? "decimal") : inputMode}
-      dir={isNumberInput ? (dir ?? "ltr") : dir}
+      inputMode={isNumberInput ? (inputMode ?? "decimal") : (inputMode ?? semanticInputMode(type))}
+      dir={isNumberInput || ltr ? "ltr" : dir}
+      autoCapitalize={ltr ? "none" : autoCapitalize}
+      autoCorrect={ltr ? "off" : autoCorrect}
+      spellCheck={ltr ? false : spellCheck}
       value={normalizedValue}
       defaultValue={normalizedDefaultValue}
       onChange={handleChange}

@@ -69,7 +69,7 @@ export default function EmployeeDetailPage() {
   }
 
   const data = employee.data!;
-  const displayName = data.display_name || data.username;
+  const displayName = data.display_name || data.email;
   const checklistScope = data.restrict_checklist_access
     ? t("{{count}} checklists", { count: data.allowed_checklists_info.length })
     : t("All checklists");
@@ -85,7 +85,7 @@ export default function EmployeeDetailPage() {
         title={displayName}
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
-            <span>@{data.username}</span>
+            <span>{data.email}</span>
             {data.position ? <span>· {data.position}</span> : null}
             <Badge variant={data.is_active ? "default" : "secondary"}>
               {t(data.is_active ? "Active" : "Inactive")}
@@ -134,7 +134,7 @@ export default function EmployeeDetailPage() {
           {(
             [
               ["Full name", displayName],
-              ["Username", data.username],
+              ["Email", data.email],
               ["Position", data.position || "—"],
               ["Status", t(data.is_active ? "Active" : "Inactive")],
               ["Staff access", data.is_staff ? t("Yes") : t("No")],

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useApiQuery } from "@/features/shared/api";
 import { errorMessage } from "@/lib/api";
 
@@ -14,17 +15,24 @@ type SyncStatus = {
   }[];
 };
 export default function RegistrySyncStatus() {
+  const { t } = useTranslation();
   const query = useApiQuery<SyncStatus>(["registry-sync-status"], "/registry/sync/");
   if (query.error) return <p role="alert">{errorMessage(query.error)}</p>;
   if (!query.data) return null;
   return (
     <details className="rounded border p-3 text-sm">
-      <summary>Automatic registration sync: {query.data.enabled ? "enabled" : "disabled"}</summary>
+      <summary>
+        {t("Automatic licensing sync: {{state}}", {
+          state: t(query.data.enabled ? "Enabled" : "Disabled"),
+        })}
+      </summary>
       <p className="text-muted-foreground my-2">
-        One page per category, with {query.data.interval} seconds between batches. Existing mappings
-        prevent duplicate imports. Only primary registry identities are refreshed.
+        {t(
+          "One page per category, with {{interval}} seconds between batches. Only primary registry identities are refreshed.",
+          { interval: query.data.interval },
+        )}
       </p>
-      {query.data.states.length === 0 && <p>No sync attempt recorded yet.</p>}
+      {query.data.states.length === 0 && <p>{t("No sync attempt recorded yet.")}</p>}
       {query.data.states.map((state) => (
         <p key={`${state.source_id}:${state.kind_id}`} className="my-2">
           <strong>
@@ -33,10 +41,12 @@ export default function RegistrySyncStatus() {
           :{" "}
           {state.last_error ||
             (state.last_success_at
-              ? `Last page synced ${new Date(state.last_success_at).toLocaleString()}`
-              : "Waiting")}
+              ? t("Last page synced {{date}}", {
+                  date: new Date(state.last_success_at).toLocaleString(),
+                })
+              : t("Waiting"))}
           <span className="text-muted-foreground block">
-            Next page {state.next_page} ·{" "}
+            {t("Next page {{page}}", { page: state.next_page })} ·{" "}
             {Object.entries(state.counts)
               .map(([key, value]) => `${key}: ${value}`)
               .join(" · ")}

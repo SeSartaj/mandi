@@ -279,6 +279,46 @@ function FormInput<T extends FieldValues>({
 
 export default FormInput;
 
+// ===== Semantic form inputs =====
+type SemanticFormInputProps<T extends FieldValues> = Omit<
+  FormInputProps<T>,
+  "type" | "autoComplete" | "inputMode" | "dir" | "autoCapitalize" | "autoCorrect" | "spellCheck"
+>;
+
+/** Email field: email keyboard/validation hints and forced LTR text. */
+export function EmailInput<T extends FieldValues>(props: SemanticFormInputProps<T>) {
+  return (
+    <FormInput
+      {...props}
+      type="email"
+      autoComplete="email"
+      inputMode="email"
+      dir="ltr"
+      autoCapitalize="none"
+      autoCorrect="off"
+      spellCheck={false}
+    />
+  );
+}
+
+/** Password field: masked, with the shared visibility toggle, always LTR. */
+export function PasswordInput<T extends FieldValues>({
+  autoComplete = "current-password",
+  ...props
+}: SemanticFormInputProps<T> & { autoComplete?: string }) {
+  return (
+    <FormInput
+      {...props}
+      type="password"
+      autoComplete={autoComplete}
+      dir="ltr"
+      autoCapitalize="none"
+      autoCorrect="off"
+      spellCheck={false}
+    />
+  );
+}
+
 // ===== Simple Input =====
 interface SimpleInputProps extends Omit<BaseInputProps, "leftAddon"> {
   label?: string;

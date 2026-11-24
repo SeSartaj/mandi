@@ -1,7 +1,7 @@
 """Backfill coordinates from registry list pages without fetching personal profiles."""
 from django.core.management.base import BaseCommand, CommandError
 from apps.establishments.models import SourceLink, Establishment
-from apps.integrations.registry import adapter_for, canonical_source
+from apps.integrations.registry import adapter_for
 from apps.integrations.licensing import candidate, KIND_CATEGORIES
 
 
@@ -9,10 +9,10 @@ class Command(BaseCommand):
     help = "Save coordinates for existing primary registry establishments from all registry list pages."
 
     def add_arguments(self, parser):
-        parser.add_argument("--source", default="registration")
+        parser.add_argument("--source", default="licensing")
 
     def handle(self, **options):
-        source = canonical_source(options["source"])
+        source = options["source"]
         adapter = adapter_for(source)
         if not adapter or not hasattr(adapter, "list_page"):
             raise CommandError("This registry does not support listing establishments.")

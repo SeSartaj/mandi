@@ -6,34 +6,51 @@ Mandi keeps a small identity record locally so it can list establishments, issue
 
 An external system catalog entry selects an adapter from `apps/integrations/registry.py`. Implement `search(kind, search, page, page_size)`, `identity(kind, external_id)` and `details(kind, external_id)` there. Credentials belong in backend environment settings. Never place them in a catalog entry or frontend bundle. Adapter identity projections expose business identity/location only. Real source links cache only the display name and synchronization time, not full profiles. New systems require code for their actual API contract; adding a catalog entry alone cannot connect an arbitrary API.
 
-The Registration adapter now implements the four-category Licensing API contract supplied with the project: company → importer, factory → factory, pharmacy → pharmacy, wholesale → wholesaler. Both adapters share the contract/client but use independent origins and credentials. No upstream writes are performed. The corrected Registration origin is `http://192.168.1.4:8008`; the original address was supplied in error. Survey/archive support demonstration records only when `DEMO_INTEGRATIONS=1`; configure actual adapters for real use.
+The contract a new source system must implement is documented in [external source integration contract](integration-contract.md).
 
-## Automatic registration sync
+The Licensing adapter implements the four-category Licensing API contract supplied with the project: company → importer, factory → factory, pharmacy → pharmacy, wholesale → wholesaler. It is the single external application registry; archive and survey references are derived from it. No upstream writes are performed. Configure the origin with `LICENSING_BASE_URL` and the key with `LICENSING_REGISTRATION_API_KEY`; the same connection powers manual search/connect and automatic sync. Survey/archive support demonstration records only when `DEMO_INTEGRATIONS=1`; configure actual adapters for real use.
 
-The single Compose stack includes a dedicated `registry-worker`, separate from ODK collection sync. With a registration origin/key configured, it automatically creates establishments and primary source mappings, then refreshes those identities on subsequent passes. Existing secondary mappings and ownership transfers to Mandi are respected; sync never adopts them implicitly. Missing upstream records are retained locally. No names are used for automatic merging.
+## Automatic licensing sync
+
+The single Compose stack includes a dedicated `registry-worker`, separate from ODK collection sync. With a Licensing origin/key configured, it automatically creates establishments and primary source mappings, then refreshes those identities on subsequent passes. Existing secondary mappings and ownership transfers to Mandi are respected; sync never adopts them implicitly. Missing upstream records are retained locally. No names are used for automatic merging.
 
 Server-only configuration:
 
 ```dotenv
-REGISTRATION_BASE_URL=http://192.168.1.4:8008
-REGISTRATION_API_KEY=<read-only key>
-REGISTRATION_TIMEOUT=15
-REGISTRATION_SYNC_ENABLED=1
-REGISTRATION_SYNC_INTERVAL=60
-REGISTRATION_SYNC_PAGE_SIZE=50
+LICENSING_BASE_URL=http://192.168.1.4:8008
+LICENSING_REGISTRATION_API_KEY=<read-only key>
+LICENSING_TIMEOUT=15
+LICENSING_SYNC_ENABLED=1
+LICENSING_SYNC_INTERVAL=60
+LICENSING_SYNC_PAGE_SIZE=50
 ```
 
 Use the backend **origin**, without `/api` appended: the client constructs `/api/applications/{category}/registration/list/` and its detail routes. The actual key is stored only in ignored environment files, not this document.
 
+The deployed Licensing origin is `http://192.168.1.4:8008`. An older backup contains `http://10.10.0.125:8001`, a previous developer-local instance; do not use it. The Licensing frontend's own `.env.local` describes its browser API and is not Mandi's configuration.
+
 Each batch fetches one page per active supported type, ordered by `created_at`, then fetches details for complete identity/location/status. Page size is capped at 100. Page cursors survive worker restarts. The last page wraps to page one so all records are revisited; 60 seconds is the pause between batches, not a promise that every establishment refreshes every minute. Per-record failures are retried on the next full pass; page failures retain their cursor, and invalid later-page 404s reset to page one. A PostgreSQL advisory lock prevents overlapping batches from separate workers/manual commands. Error/status records contain no API keys, raw profiles or upstream response bodies.
 
-View progress/errors under **Establishments → Automatic registration sync** or `GET /api/v1/registry/sync/`. The UI refresh button reloads status. Trigger one bounded batch with:
+View progress/errors under **Establishments → Automatic licensing sync** or `GET /api/v1/registry/sync/`. The UI refresh button reloads status. Trigger one bounded batch with:
 
 ```sh
 docker compose exec registry-worker python manage.py sync_registries --once
 ```
 
-It will report `busy` if the worker is already running a batch. Configure `MANDI_SYNC_USERNAME` to choose an existing active Mandi user with view/add/change establishment and view/change source-link permissions; the bootstrap administrator is the default. Set `REGISTRATION_SYNC_ENABLED=0` to pause automatic registry ingestion while Mandi and ODK continue operating.
+It will report `busy` if the worker is already running a batch. Configure `MANDI_SYNC_USERNAME` to choose an existing active Mandi user with view/add/change establishment and view/change source-link permissions; the bootstrap administrator is the default. Set `LICENSING_SYNC_ENABLED=0` to pause automatic registry ingestion while Mandi and ODK continue operating.
+
+## External systems page
+
+**Establishments → External systems** (`/external-systems`) lists every active catalog entry with its connection state, last successful sync, and two actions:
+
+- **Sync now** runs one bounded batch for that system and reports created/updated/failed counts; a second press while a batch runs reports that it is busy.
+- **Complete sync** queues one complete pass. The request is executed by `registry-worker`, which may take several minutes, so the HTTP call returns immediately and the page polls for `pending` / `running` / `done` state.
+
+- `GET /api/v1/registry/systems/` returns the same state, including `configured`, `syncable`, `can_sync`, per-category cursors, and the latest `full_sync` request.
+- `POST /api/v1/registry/systems/{code}/sync/` accepts an optional `page_size` (1–100) and runs one batch.
+- `POST /api/v1/registry/systems/{code}/full-sync/` queues a complete pass (202) or reports the active request (200).
+- Licensing is directly syncable. Archive and Survey are delivered through Licensing, so their buttons stay disabled and their status reads **Derived from Licensing**.
+- Viewing the page needs `establishments.view_establishment`; triggering either sync additionally needs view/add/change establishment and change source-link permissions.
 
 ## Workflow
 
@@ -54,7 +71,7 @@ Use the existing single Compose deployment:
 ./scripts/deploy.sh
 ```
 
-The script builds the inactive Mandi slot, backs up its database, applies migrations, checks health, switches the proxy, and updates both workers. Routine Mandi deployments leave Central running. These migrations add tables/fields and relax old hardcoded choices, allowing the previous slot to remain up during deployment. See `docs/deployment.md` for server/domain configuration and rollback limits. The Registration address is private: the Ubuntu server/container must have a route to its network.
+The script builds the inactive Mandi slot, backs up its database, applies migrations, checks health, switches the proxy, and updates both workers. Routine Mandi deployments leave Central running. These migrations add tables/fields and relax old hardcoded choices, allowing the previous slot to remain up during deployment. See `docs/deployment.md` for server/domain configuration and rollback limits. The Licensing origin is private: the Ubuntu server/container must have a route to its network.
 
 ## Acceptance tests
 
@@ -82,7 +99,7 @@ Tests use an isolated test database. Use a temporary `MEDIA_ROOT` when running a
 
 ## Licensing, archive and survey detail pages
 
-When the Registration origin is the configured Licensing API, Mandi displays it once as **Licensing**. Existing `registration` mappings remain valid; `/sources/licensing/` resolves to that connection in live mode if no separate Licensing origin/key is configured. Imported records are linked during creation, without a manual Connect step.
+The Licensing origin supplies the four application categories and the archive/survey references embedded in its records. Imported records are linked during creation, without a manual Connect step. The previous `registration` source was merged into `licensing` by migration, so existing mappings remain valid.
 
 License detail responses supply `archive_id`/`survey_id` and embedded profiles. Import, identity refresh and automatic sync maintain those relational mappings, including unchanged identities. Automatically managed mappings follow changed/removed references. Manual mappings are preserved; conflicting references fail visibly rather than overwriting someone else's mapping. Existing imports can be backfilled with one complete pass:
 

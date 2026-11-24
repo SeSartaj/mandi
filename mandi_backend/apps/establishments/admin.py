@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Establishment, SourceLink, EstablishmentType, ExternalSystem, RegistrySyncCursor
+from .models import Establishment, SourceLink, EstablishmentType, ExternalSystem, RegistrySyncCursor, RegistrySyncRequest
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):
@@ -69,3 +69,9 @@ class ExternalSystemAdmin(EstablishmentTypeAdmin):
 @admin.register(RegistrySyncCursor)
 class RegistrySyncCursorAdmin(ReadOnlyAdmin):
     list_display = ("source", "kind", "next_page", "last_attempt_at", "last_success_at", "last_error")
+
+
+@admin.register(RegistrySyncRequest)
+class RegistrySyncRequestAdmin(ReadOnlyAdmin):
+    list_display = ("source", "state", "requested_by", "requested_at", "started_at", "finished_at")
+    list_filter = ("source", "state")

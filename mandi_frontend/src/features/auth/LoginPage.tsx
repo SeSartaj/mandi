@@ -6,11 +6,12 @@ import LanguageSwitcher from "@/components/translation/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import CustomForm from "@/components/ui/custom/CustomForm";
-import FormInput from "@/components/ui/custom/CustomInput";
+import { EmailInput, PasswordInput } from "@/components/ui/custom/CustomInput";
 import { ThemeToggle } from "@/components/ui/custom/ThemeToggle";
 import { isRTL } from "@/config/languages";
 import { useLocale } from "@/i18n/useTranslations";
 import { api, errorMessage } from "@/lib/api";
+import { notify } from "@/lib/notify";
 
 export default function LoginPage({
   onLogin,
@@ -21,14 +22,18 @@ export default function LoginPage({
 }) {
   const { t } = useTranslation();
   const rtl = isRTL(useLocale());
-  const form = useForm({ defaultValues: { username: "", password: "" } });
+  const form = useForm({ defaultValues: { email: "", password: "" } });
   const mutation = useMutation({
-    mutationFn: async (values: { username: string; password: string }) =>
+    mutationFn: async (values: { email: string; password: string }) =>
       (await api.post("/auth/login/", values)).data,
     onSuccess: (data) => {
       sessionStorage.setItem("mandi-token", data.token);
       onLogin(data.token);
     },
+    onError: (error) =>
+      notify.error(t("Sign-in failed."), {
+        description: errorMessage(error),
+      }),
   });
 
   return (
@@ -52,8 +57,8 @@ export default function LoginPage({
             <h2 className="mt-2 max-w-[15rem] text-center text-xs text-balance">
               {t("Afghanistan Food and Drug Authority")}
             </h2>
-            <h1 dir="ltr" className="mt-8 text-center text-xl font-semibold">
-              mandi<span className="opacity-70">.</span>
+            <h1 className="mt-8 text-center text-xl font-semibold">
+              {t("Monitoring & inspection")}
             </h1>
             <p className="text-sm opacity-80">{t("Monitoring & inspection")}</p>
 
@@ -97,23 +102,18 @@ export default function LoginPage({
             </div>
 
             <div className="grid gap-4">
-              <FormInput
+              <EmailInput
                 form={form}
-                name="username"
-                label={t("Username")}
-                autoComplete="username"
+                name="email"
+                label={t("Email")}
                 autoFocus
-                dir="ltr"
                 reserveErrorSpace={false}
                 rules={{ required: t("Required") }}
               />
-              <FormInput
+              <PasswordInput
                 form={form}
                 name="password"
                 label={t("Password")}
-                type="password"
-                autoComplete="current-password"
-                dir="ltr"
                 reserveErrorSpace={false}
                 rules={{ required: t("Required") }}
               />

@@ -13,6 +13,7 @@ import CustomForm from "@/components/ui/custom/CustomForm";
 import FormInput from "@/components/ui/custom/CustomInput";
 import type { Checklist } from "@/lib/api";
 import { api, errorMessage, fileUrl } from "@/lib/api";
+import { notify } from "@/lib/notify";
 
 type ChecklistValues = {
   code: string;
@@ -86,10 +87,19 @@ export default function ChecklistForm({
       ).data;
     },
     onSuccess: () => {
+      notify.success(
+        t(existing ? "{{entity}} updated." : "{{entity}} created.", {
+          entity: t("Checklist"),
+        }),
+      );
       client.invalidateQueries({ queryKey: ["checklists"] });
       client.invalidateQueries({ queryKey: ["form-checklists"] });
       onClose();
     },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
 
   return (

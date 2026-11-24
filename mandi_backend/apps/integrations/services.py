@@ -56,8 +56,6 @@ def source_search(actor, source, kind, search="", page=1, page_size=20):
 def source_detail(actor, establishment_id, source, include_sensitive=None):
     """Load current details for the record already linked to this establishment."""
     from apps.establishments.services import get_establishment
-    from .registry import canonical_source
-    source = canonical_source(source)
     require(actor, "establishments.view_sourcelink")
     establishment = get_establishment(actor, establishment_id)
     try:
@@ -86,7 +84,7 @@ def source_detail(actor, establishment_id, source, include_sensitive=None):
         return detail_with_field_ids(detail)
     if source in {"archive", "survey"}:
         from . import licensing
-        primary = establishment.source_links.filter(source__in=["registration", "licensing"]).order_by("-is_primary").first()
+        primary = establishment.source_links.filter(source="licensing").order_by("-is_primary").first()
         if primary:
             upstream = adapter_for(primary.source)
             if upstream:

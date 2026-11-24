@@ -19,6 +19,7 @@ export function GlobalBreadcrumb() {
   const [section, id, child, source] = pathname.split("/").filter(Boolean);
   const labels: Record<string, string> = {
     establishments: "Establishments",
+    "external-systems": "External systems",
     checklists: "Checklists",
     submissions: "Submissions",
     employees: "Employees",

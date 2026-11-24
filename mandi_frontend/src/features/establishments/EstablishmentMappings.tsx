@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { Establishment, SourceLink } from "@/lib/api";
 import { api, errorMessage } from "@/lib/api";
+import { notify } from "@/lib/notify";
 import { useRegistryCatalog } from "./registry";
 
 type Candidate = {
@@ -65,19 +66,29 @@ export default function EstablishmentMappings({
         external_id: externalId,
       }),
     onSuccess: () => {
+      notify.success(t("{{entity}} connected.", { entity: t("Source link") }));
       client.invalidateQueries({ queryKey: ["establishment", establishment.id] });
       client.invalidateQueries({ queryKey: ["registry"] });
       setOpen(false);
     },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
 
   const disconnect = useMutation({
     mutationFn: async (link: SourceLink) =>
       api.delete(`/establishments/${establishment.id}/sources/${link.source}/`),
     onSuccess: () => {
+      notify.success(t("{{entity}} disconnected.", { entity: t("Source link") }));
       client.invalidateQueries({ queryKey: ["establishment", establishment.id] });
       setDisconnecting(null);
     },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
 
   const openDialog = () => {

@@ -20,6 +20,7 @@ import OdkProjectsDialog from "@/features/checklists/OdkProjectsDialog";
 import { useApiQuery } from "@/features/shared/api";
 import type { Checklist, OdkProject } from "@/lib/api";
 import { api, errorMessage } from "@/lib/api";
+import { notify } from "@/lib/notify";
 
 function structureConflict(error: unknown) {
   return (
@@ -48,7 +49,14 @@ export default function ChecklistsPage() {
         ...(deployProject ? { project_id: deployProject } : {}),
         ...(force ? { force: true } : {}),
       }),
-    onSuccess: () => setDeploying(null),
+    onSuccess: () => {
+      notify.success(t("{{entity}} deployed.", { entity: t("Checklist") }));
+      setDeploying(null);
+    },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
     onSettled: () => {
       client.invalidateQueries({ queryKey: ["checklists"] });
       client.invalidateQueries({ queryKey: ["form-checklists"] });
@@ -68,6 +76,11 @@ export default function ChecklistsPage() {
       link.remove();
       URL.revokeObjectURL(url);
     },
+    onSuccess: () => notify.success(t("Download started.")),
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
   const downloadCsv = useMutation({
     mutationFn: async () => {
@@ -83,6 +96,11 @@ export default function ChecklistsPage() {
       link.remove();
       URL.revokeObjectURL(url);
     },
+    onSuccess: () => notify.success(t("Download started.")),
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
 
   const close = () => {

@@ -27,6 +27,9 @@ const EstablishmentDetailPage = lazy(
 );
 const SourceDetailPage = lazy(() => import("@/features/establishments/SourceDetailPage"));
 const EstablishmentsPage = lazy(() => import("@/features/establishments/EstablishmentsPage"));
+const ExternalSystemsPage = lazy(
+  () => import("@/features/establishments/ExternalSystemsPage"),
+);
 const SubmissionsPage = lazy(() => import("@/features/submissions/SubmissionsPage"));
 
 export default function App() {
@@ -137,6 +140,14 @@ export default function App() {
                 fallback={<PermissionDenied />}
               >
                 <SourceDetailPage />
+              </Can>
+            }
+          />
+          <Route
+            path="/external-systems"
+            element={
+              <Can permission="establishments.view_establishment" fallback={<PermissionDenied />}>
+                <ExternalSystemsPage />
               </Can>
             }
           />

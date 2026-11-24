@@ -66,6 +66,7 @@ export function fileUrl(path: string | null | undefined): string {
 export type Employee = {
   id: number;
   username: string;
+  email: string;
   display_name: string;
   position: string;
   is_active: boolean;
@@ -139,6 +140,11 @@ export type Establishment = {
   longitude: number | null;
   source_links: SourceLink[];
   primary_source?: string | null;
+  inspection_stats?: {
+    total: number;
+    this_year: number;
+    last_submitted_at: string | null;
+  };
   created_at: string;
   updated_at: string;
 };

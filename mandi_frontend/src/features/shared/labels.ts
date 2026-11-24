@@ -1,10 +1,19 @@
-export const establishmentKinds = ["pharmacy", "wholesaler", "importer", "factory"] as const;
+export const establishmentKinds = [
+  "pharmacy",
+  "wholesaler",
+  "importer",
+  "factory",
+  "hospital",
+  "clinic",
+] as const;
 
 const labels: Record<string, string> = {
   pharmacy: "Pharmacy",
   wholesaler: "Wholesaler",
   importer: "Importer",
   factory: "Factory",
+  hospital: "Hospital",
+  clinic: "Clinic",
   comprehensive: "Comprehensive",
   brief: "Brief",
   follow_up: "Follow-up",

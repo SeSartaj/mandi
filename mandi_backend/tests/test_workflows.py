@@ -14,7 +14,9 @@ from rest_framework.test import APIClient
 class WorkflowTests(TestCase):
     def setUp(self):
         self.manager = get_user_model().objects.create_user(
-            username="manager", password="TestPassword-2026!"
+            username="manager",
+            email="Manager@Example.test",
+            password="TestPassword-2026!",
         )
         self.manager.user_permissions.set(Permission.objects.all())
         self.reader = get_user_model().objects.create_user(username="reader")
@@ -224,6 +226,33 @@ class WorkflowTests(TestCase):
         self.assertEqual(len(response.data["results"]), 2)
         self.assertEqual(response.data["count"], 5)
 
+    def test_api_filters_establishments_by_province_and_district(self):
+        from apps.core.models import Province
+
+        other = save_establishment(
+            self.manager,
+            {
+                "name": "Third",
+                "kind": "pharmacy",
+                "province": "Herat",
+                "district": "Injil",
+            },
+        )
+        kabul = Province.objects.get(name="Kabul")
+        for value in (str(kabul.pk), "Kabul"):
+            response = self.client.get("/api/v1/establishments/", {"province": value})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data["count"], 2)
+        district = other.district_id
+        response = self.client.get(
+            "/api/v1/establishments/", {"province": "Herat", "district": str(district)}
+        )
+        self.assertEqual([row["name"] for row in response.data["results"]], ["Third"])
+        response = self.client.get(
+            "/api/v1/establishments/", {"province": "Kabul", "district": str(district)}
+        )
+        self.assertEqual(response.data["count"], 0)
+
     def test_choices_carry_stable_ids(self):
         response = self.client.get(
             "/api/v1/integrations/establishment-choices/?kind=pharmacy"
@@ -237,13 +266,19 @@ class WorkflowTests(TestCase):
         self.client.force_authenticate(None)
         response = self.client.post(
             "/api/v1/auth/login/",
-            {"username": "manager", "password": "TestPassword-2026!"},
+            {"email": "manager@example.test", "password": "TestPassword-2026!"},
         )
         self.assertEqual(response.status_code, 200)
         self.client.credentials(HTTP_AUTHORIZATION="Token " + response.data["token"])
         self.assertEqual(self.client.get("/api/v1/auth/me/").status_code, 200)
         self.assertEqual(self.client.post("/api/v1/auth/logout/").status_code, 204)
         self.assertEqual(self.client.get("/api/v1/auth/me/").status_code, 401)
+        # Username-only payloads are no longer accepted.
+        rejected = self.client.post(
+            "/api/v1/auth/login/",
+            {"username": "manager", "password": "TestPassword-2026!"},
+        )
+        self.assertEqual(rejected.status_code, 400)
 
     def test_unconfigured_source_is_rejected(self):
         with self.assertRaises(ValidationError):

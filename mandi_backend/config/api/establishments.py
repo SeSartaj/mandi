@@ -1,6 +1,7 @@
 from apps.accounts import services as accounts
 from apps.establishments import services as establishments
 from apps.establishments.models import Establishment
+from apps.integrations import collection
 from apps.integrations import services as integrations
 from django.http import HttpResponse
 from rest_framework import serializers
@@ -34,11 +35,10 @@ class Establishments(APIView):
 
 class EstablishmentDetail(APIView):
     def get(self, request, pk):
-        return Response(
-            EstablishmentSerializer(
-                establishments.get_establishment(request.user, pk)
-            ).data
-        )
+        establishment = establishments.get_establishment(request.user, pk)
+        data = EstablishmentSerializer(establishment).data
+        data["inspection_stats"] = collection.statistics(request.user, establishment.pk)
+        return Response(data)
 
     def patch(self, request, pk):
         data = validated(EstablishmentSerializer, request.data, partial=True)
@@ -135,23 +135,15 @@ class RegistryCatalog(APIView):
     def get(self, request):
         accounts.require(request.user, "establishments.view_establishment")
         from apps.establishments.models import EstablishmentType, ExternalSystem
-        from apps.integrations.registry import licensing_uses_registration
-        systems = list(ExternalSystem.objects.filter(is_active=True).values("code", "name", "adapter"))
-        if licensing_uses_registration():
-            systems = [system for system in systems if system["code"] != "licensing"]
-            for system in systems:
-                if system["code"] == "registration":
-                    system["name"] = "Licensing"
-        from django.conf import settings
         from apps.integrations import licensing
         from apps.integrations.registry import ADAPTERS
+        systems = list(ExternalSystem.objects.filter(is_active=True).values("code", "name", "adapter"))
         for system in systems:
-            code = system["code"]
-            system["searchable"] = bool(
-                (system["adapter"] == "registration" and settings.REGISTRATION_BASE_URL and settings.REGISTRATION_API_KEY)
-                or (system["adapter"] == "licensing" and licensing.configured())
-                or (system["adapter"] not in {"registration", "licensing"} and system["adapter"] in ADAPTERS))
-        systems.sort(key=lambda item: (item["code"] not in {"registration", "licensing"}, item["name"]))
+            if system["adapter"] == "licensing":
+                system["searchable"] = licensing.configured()
+            else:
+                system["searchable"] = system["adapter"] in ADAPTERS
+        systems.sort(key=lambda item: (item["code"] != "licensing", item["name"]))
         from apps.core.models import District, Province
         return Response({
             "types": list(EstablishmentType.objects.filter(is_active=True).values("code", "name")),
@@ -166,9 +158,152 @@ class RegistrySyncStatus(APIView):
         accounts.require(request.user, "establishments.view_establishment")
         from django.conf import settings
         from apps.establishments.models import RegistrySyncCursor
-        return Response({"enabled": settings.REGISTRATION_SYNC_ENABLED,
-            "interval": settings.REGISTRATION_SYNC_INTERVAL,
+        return Response({"enabled": settings.LICENSING_SYNC_ENABLED,
+            "interval": settings.LICENSING_SYNC_INTERVAL,
             "states": list(RegistrySyncCursor.objects.values("source_id", "kind_id", "next_page", "last_attempt_at", "last_success_at", "last_error", "counts"))})
+
+
+REGISTRY_SYNC_PERMISSIONS = (
+    "view_establishment",
+    "view_sourcelink",
+    "add_establishment",
+    "change_establishment",
+    "change_sourcelink",
+)
+
+
+def latest_full_sync(system):
+    latest = system.sync_requests.order_by("-requested_at").first()
+    if latest is None:
+        return None
+    return {
+        "state": latest.state,
+        "requested_at": latest.requested_at,
+        "started_at": latest.started_at,
+        "finished_at": latest.finished_at,
+        "result": latest.result,
+        "error": latest.error,
+    }
+
+
+class RegistrySystems(APIView):
+    """Active external systems with connection, sync capability, and sync state."""
+
+    def get(self, request):
+        from django.conf import settings
+        from apps.establishments.models import ExternalSystem, RegistrySyncCursor, RegistrySyncRequest
+        from apps.integrations import licensing
+        from apps.integrations.registry import ADAPTERS
+
+        accounts.require(request.user, "establishments.view_establishment")
+        can_trigger = all(
+            request.user.has_perm(f"establishments.{permission}")
+            for permission in REGISTRY_SYNC_PERMISSIONS
+        )
+        systems = []
+        for system in ExternalSystem.objects.filter(is_active=True).order_by("name"):
+            adapter = ADAPTERS.get(system.adapter)
+            if system.adapter == "licensing":
+                configured = licensing.configured()
+            else:
+                # Archive/survey profiles are delivered through Licensing, so
+                # they count as available when that connection is configured.
+                configured = adapter is not None or (
+                    system.adapter in {"archive", "survey"} and licensing.configured()
+                )
+            syncable = bool(configured and adapter is not None and hasattr(adapter, "list_page"))
+            states = list(
+                RegistrySyncCursor.objects.filter(source=system).values(
+                    "kind_id",
+                    "next_page",
+                    "last_attempt_at",
+                    "last_success_at",
+                    "last_error",
+                    "counts",
+                )
+            )
+            systems.append({
+                "code": system.code,
+                "name": system.name,
+                "adapter": system.adapter,
+                "configured": configured,
+                "syncable": syncable,
+                "can_sync": syncable and can_trigger,
+                "states": states,
+                "full_sync": latest_full_sync(system),
+            })
+        return Response({
+            "enabled": settings.LICENSING_SYNC_ENABLED,
+            "interval": settings.LICENSING_SYNC_INTERVAL,
+            "systems": systems,
+        })
+
+
+class RegistrySystemSync(APIView):
+    """Run one bounded sync batch for a directly supported external system."""
+    def post(self, request, code):
+        from django.conf import settings
+        from apps.establishments.models import ExternalSystem
+        from apps.integrations import licensing
+        from apps.integrations.registry import adapter_for
+        from apps.integrations.registry_sync import sync_batch
+
+        system = ExternalSystem.objects.filter(pk=code, is_active=True).first()
+        if system is None:
+            raise serializers.ValidationError({"source": "Unknown or inactive external system."})
+        if system.adapter == "licensing" and not licensing.configured():
+            raise serializers.ValidationError({"source": "The Licensing connection is not configured."})
+        adapter = adapter_for(code)
+        if adapter is None or not hasattr(adapter, "list_page"):
+            raise serializers.ValidationError({"source": "This external system does not support direct sync."})
+        try:
+            page_size = min(100, max(1, int(request.data.get("page_size", settings.LICENSING_SYNC_PAGE_SIZE))))
+        except (TypeError, ValueError):
+            raise serializers.ValidationError({"page_size": "Enter a whole number."})
+        result = sync_batch(request.user, code, page_size)
+        return Response(result, status=202 if result.get("busy") else 200)
+
+
+class RegistrySystemFullSync(APIView):
+    """Queue one complete pass; the registry worker executes it in the background."""
+
+    def post(self, request, code):
+        from django.db import IntegrityError, transaction
+        from apps.establishments.models import ExternalSystem, RegistrySyncRequest
+        from apps.integrations import licensing
+        from apps.integrations.registry import adapter_for
+
+        system = ExternalSystem.objects.filter(pk=code, is_active=True).first()
+        if system is None:
+            raise serializers.ValidationError({"source": "Unknown or inactive external system."})
+        if system.adapter == "licensing" and not licensing.configured():
+            raise serializers.ValidationError({"source": "The Licensing connection is not configured."})
+        adapter = adapter_for(code)
+        if adapter is None or not hasattr(adapter, "list_page"):
+            raise serializers.ValidationError({"source": "This external system does not support direct sync."})
+        for permission in REGISTRY_SYNC_PERMISSIONS:
+            accounts.require(request.user, f"establishments.{permission}")
+        active = RegistrySyncRequest.objects.filter(
+            source=system, state__in=["pending", "running"]
+        ).first()
+        queued = False
+        if active is None:
+            try:
+                with transaction.atomic():
+                    active = RegistrySyncRequest.objects.create(
+                        source=system, requested_by=request.user
+                    )
+                    queued = True
+            except IntegrityError:
+                active = RegistrySyncRequest.objects.filter(
+                    source=system, state__in=["pending", "running"]
+                ).first()
+        if active is None:
+            raise serializers.ValidationError("The complete sync request could not be queued.")
+        return Response(
+            {"state": active.state, "requested_at": active.requested_at, "queued": queued},
+            status=202 if queued else 200,
+        )
 
 
 class NearbyEstablishments(APIView):

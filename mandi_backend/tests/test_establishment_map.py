@@ -22,14 +22,14 @@ class EstablishmentMapTests(TestCase):
 
     def test_coordinates_backfill_and_nearby_distance(self):
         for key, lat, lon in [("center", 34.5, 69.2), ("near", 34.501, 69.2), ("far", 35.5, 69.2)]:
-            sync_registry_record(self.actor, "registration", "pharmacy", self.record(key, lat, lon))
+            sync_registry_record(self.actor, "licensing", "pharmacy", self.record(key, lat, lon))
         link = SourceLink.objects.get(external_id="pharmacy:near")
         link.establishment.latitude = None
         link.establishment.longitude = None
         link.establishment.save()
         link.details = {"name": "near"}
         link.save()
-        self.assertEqual(sync_registry_record(self.actor, "registration", "pharmacy", self.record("near", 34.501, 69.2)), "updated")
+        self.assertEqual(sync_registry_record(self.actor, "licensing", "pharmacy", self.record("near", 34.501, 69.2)), "updated")
         response = self.client.get("/api/v1/establishments/nearby/", {"latitude": 34.5, "longitude": 69.2})
         self.assertEqual(response.status_code, 200)
         link.establishment.refresh_from_db()
@@ -41,8 +41,10 @@ class EstablishmentMapTests(TestCase):
     def test_complete_address_is_preserved_without_coordinates(self):
         raw = {"application_id": "one", "name": "One", "address": {"address": {"house_number": "12", "street": "Market Road", "not_precise_address": "Near hospital"}}}
         location = next(section for section in application_details("pharmacy", raw)["sections"] if section["title"] == "Location")
-        address = next(field["value"] for field in location["fields"] if field["label"] == "Address")
-        self.assertEqual(address, raw["address"]["address"])
+        fields = {field["label"]: field["value"] for field in location["fields"]}
+        self.assertEqual(fields["Address"], "Near hospital")
+        self.assertEqual(fields["Street"], "Market Road")
+        self.assertEqual(fields["House number"], "12")
         self.assertNotIn("location", location)
 
     def test_permission_required(self):
@@ -60,12 +62,12 @@ class EstablishmentMapTests(TestCase):
         self.assertEqual(self.client.patch(url, {"latitude": 91}, format="json").status_code, 400)
         self.assertEqual(self.client.patch(url, {"latitude": None}, format="json").status_code, 400)
 
-    @override_settings(LICENSING_BASE_URL="", REGISTRATION_BASE_URL="http://registry.test", REGISTRATION_API_KEY="key")
-    @patch("apps.integrations.registry.RegistrationAdapter.list_page")
+    @override_settings(LICENSING_BASE_URL="http://licensing.test", LICENSING_REGISTRATION_API_KEY="key")
+    @patch("apps.integrations.registry.LicensingAdapter.list_page")
     def test_backfill_existing_registry_records_without_opening_profiles(self, list_page):
         raw = {"application_id": "existing", "name": "Existing", "address": {"latitude": "34.5", "longitude": "69.2"}}
         record = candidate("pharmacy", raw)
-        sync_registry_record(self.actor, "registration", "pharmacy", record)
+        sync_registry_record(self.actor, "licensing", "pharmacy", record)
         Establishment.objects.update(latitude=None, longitude=None)
         list_page.return_value = {"results": [raw], "next": None}
         output = StringIO()
@@ -74,7 +76,7 @@ class EstablishmentMapTests(TestCase):
         self.assertEqual(Establishment.objects.get().latitude, 34.5)
 
     def test_coordinate_only_registry_changes_are_applied(self):
-        sync_registry_record(self.actor, "registration", "pharmacy", self.record("move", 34.5, 69.2))
-        sync_registry_record(self.actor, "registration", "pharmacy", self.record("move", 34.6, 69.3))
+        sync_registry_record(self.actor, "licensing", "pharmacy", self.record("move", 34.5, 69.2))
+        sync_registry_record(self.actor, "licensing", "pharmacy", self.record("move", 34.6, 69.3))
         obj = Establishment.objects.get()
         self.assertEqual((obj.latitude, obj.longitude), (34.6, 69.3))

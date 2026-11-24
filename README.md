@@ -133,6 +133,7 @@ Mandi runs a Django/PostgreSQL backend with business logic in services, and a Re
 - [Deployment and operations](docs/deployment.md)
 - [Establishment registries and external sources](docs/registry-and-evidence.md)
 - [Licensing API reference](docs/licensing-api-reference.md)
+- [External source integration contract](docs/integration-contract.md)
 - [Checklist source review](docs/checklist-review-findings.md)
 - [Product notes](docs/brainstorming_nov21_2026.md)
 

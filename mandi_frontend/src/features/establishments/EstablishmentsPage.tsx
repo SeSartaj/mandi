@@ -1,9 +1,13 @@
 import RegistrySyncStatus from "./RegistrySyncStatus";
 import RegistryImport from "./RegistryImport";
-import { useEstablishmentKinds, useLocationName } from "@/features/establishments/registry";
+import {
+  useEstablishmentKinds,
+  useLocationName,
+  useLocations,
+} from "@/features/establishments/registry";
 import { CreateButton } from "@/components/public/ActionButton";
-import { useState } from "react";
-import { Search, Tags } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronDown, Search, SlidersHorizontal, Tags } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
@@ -31,19 +35,32 @@ export default function EstablishmentsPage() {
   const { t } = useTranslation();
   const establishmentKinds = useEstablishmentKinds();
   const locationName = useLocationName();
+  const { provinces, districts } = useLocations();
   const { params, update, page, setPage } = useListParams();
   const search = params.get("search") ?? "";
   const debouncedSearch = useDebouncedValue(search, 300);
   const kind = params.get("kind") ?? "";
+  const province = params.get("province") ?? "";
+  const district = params.get("district") ?? "";
+  const [advanced, setAdvanced] = useState(Boolean(province || district));
   const [pageSize, setPageSize] = useTablePageSize();
   const [open, setOpen] = useState(false);
   const [typesOpen, setTypesOpen] = useState(false);
   const data = useApiQuery<Page<Establishment>>(["establishments"], "/establishments/", {
     search: debouncedSearch,
     kind,
+    province,
+    district,
     page,
     page_size: pageSize,
   });
+
+  const districtOptions = useMemo(
+    () => districts.filter((item) => !province || String(item.province_id) === province),
+    [districts, province],
+  );
+  const advancedCount = [province, district].filter(Boolean).length;
+  const hasFilters = Boolean(search || kind || province || district);
 
   const rows = data.data?.results ?? [];
   const count = data.data?.count ?? 0;
@@ -99,12 +116,76 @@ export default function EstablishmentsPage() {
                 })),
               ]}
             />
-            {(search || kind) && (
-              <Button variant="ghost" onClick={() => update({ search: "", kind: "" })}>
+            <Button
+              variant="outline"
+              aria-expanded={advanced}
+              aria-controls="establishment-advanced-filters"
+              onClick={() => setAdvanced((value) => !value)}
+            >
+              <SlidersHorizontal />
+              {t("Advanced filters")}
+              {advancedCount ? ` (${advancedCount})` : null}
+              <ChevronDown
+                className={advanced ? "size-4 rotate-180 transition-transform" : "size-4 transition-transform"}
+              />
+            </Button>
+            {hasFilters && (
+              <Button
+                variant="ghost"
+                onClick={() => update({ search: "", kind: "", province: "", district: "" })}
+              >
                 {t("Clear filters")}
               </Button>
             )}
           </div>
+
+          {advanced && (
+            <div
+              id="establishment-advanced-filters"
+              className="bg-muted/20 grid gap-4 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-3"
+            >
+              <div className="space-y-1.5">
+                <span className="text-muted-foreground block text-xs font-medium">
+                  {t("Province")}
+                </span>
+                <AppSelect
+                  label={t("All provinces")}
+                  className="w-full"
+                  value={province || "__all__"}
+                  onChange={(value) =>
+                    update({ province: value === "__all__" ? "" : String(value), district: "" })
+                  }
+                  options={[
+                    { value: "__all__", label: t("All provinces") },
+                    ...provinces.map((item) => ({
+                      value: String(item.id),
+                      label: locationName(item.name, item.name_local),
+                    })),
+                  ]}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <span className="text-muted-foreground block text-xs font-medium">
+                  {t("District")}
+                </span>
+                <AppSelect
+                  label={t("All districts")}
+                  className="w-full"
+                  value={district || "__all__"}
+                  onChange={(value) =>
+                    update({ district: value === "__all__" ? "" : String(value) })
+                  }
+                  options={[
+                    { value: "__all__", label: t("All districts") },
+                    ...districtOptions.map((item) => ({
+                      value: String(item.id),
+                      label: locationName(item.name, item.name_local),
+                    })),
+                  ]}
+                />
+              </div>
+            </div>
+          )}
 
           {data.isPending ? (
             <AppLoader label={t("Loading…")} className="py-10" />

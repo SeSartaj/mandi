@@ -1,9 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Can } from "@/components/Can";
 import { Button } from "@/components/ui/button";
 import { api, errorMessage, type Establishment } from "@/lib/api";
+import { notify } from "@/lib/notify";
 
 export default function RegistryOwnership({ establishment }: { establishment: Establishment }) {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const mutation = useMutation({
     mutationFn: ({ action, source }: { action: string; source?: string | null }) =>
@@ -11,16 +14,25 @@ export default function RegistryOwnership({ establishment }: { establishment: Es
         `/establishments/${establishment.id}/${action}/`,
         action === "ownership" ? { source } : {},
       ),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      notify.success(
+        variables.action === "refresh"
+          ? t("{{entity}} refreshed.", { entity: t("Registry identity") })
+          : t("Registry ownership updated."),
+      );
       client.invalidateQueries();
     },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
   return (
     <div className="space-y-3 rounded border p-4">
       <p>
         Identity managed by:{" "}
         <strong>
-          {establishment.primary_source === "registration"
+          {establishment.primary_source === "licensing"
             ? "Licensing"
             : establishment.primary_source || "Mandi"}
         </strong>
@@ -72,12 +84,7 @@ export default function RegistryOwnership({ establishment }: { establishment: Es
         </Can>
       </Can>
       {mutation.error && <p role="alert">{errorMessage(mutation.error)}</p>}
-      {establishment.primary_source && (
-        <p className="text-muted-foreground text-sm">
-          The local identity remains available during registry outages. Refresh requires the
-          registry to be online.
-        </p>
-      )}
+ 
     </div>
   );
 }

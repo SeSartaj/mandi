@@ -66,7 +66,7 @@ export default function EmployeesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>{t("Full name")}</TableHead>
-                <TableHead>{t("Username")}</TableHead>
+                <TableHead>{t("Email")}</TableHead>
                 <TableHead>{t("Position")}</TableHead>
                 <TableHead>{t("Status")}</TableHead>
                 <TableHead>{t("Actions")}</TableHead>
@@ -77,10 +77,10 @@ export default function EmployeesPage() {
                 <TableRow key={employee.id}>
                   <TableCell>
                     <Link className="entity-link" to={`/employees/${employee.id}`}>
-                      {employee.display_name || employee.username}
+                      {employee.display_name || employee.email}
                     </Link>
                   </TableCell>
-                  <TableCell>{employee.username}</TableCell>
+                  <TableCell>{employee.email}</TableCell>
                   <TableCell>{employee.position || "—"}</TableCell>
                   <TableCell>
                     <Badge variant={employee.is_active ? "default" : "secondary"}>

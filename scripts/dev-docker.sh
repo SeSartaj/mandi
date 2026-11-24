@@ -42,7 +42,7 @@ start() {
     echo "Stop it first: scripts/dev-local.sh stop"
     exit 1
   fi
-  local services=(mandi-db backend-blue)
+  local services=(mandi-db backend-blue registry-worker)
   ((with_frontend)) && services+=(frontend)
   # central-service pulls its dependencies (database, secrets, pyxform, mail,
   # enketo/redis) and, through public-ca, the Caddy proxy.
@@ -81,11 +81,11 @@ start() {
 }
 
 stop() {
-  "${COMPOSE[@]}" stop backend-blue mandi-init frontend \
+  "${COMPOSE[@]}" stop backend-blue mandi-init frontend registry-worker \
     central-service central-web central-enketo central-pyxform central-mail \
     central-secrets central-redis-main central-redis-cache central-db proxy \
     >/dev/null 2>&1 || true
-  "${COMPOSE[@]}" rm -f backend-blue mandi-init frontend central-service central-web \
+  "${COMPOSE[@]}" rm -f backend-blue mandi-init frontend registry-worker central-service central-web \
     >/dev/null 2>&1 || true
   echo "Stopped Docker development services (database and media volumes kept)."
 }

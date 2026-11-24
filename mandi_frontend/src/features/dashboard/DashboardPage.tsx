@@ -76,7 +76,6 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <AppTitle
         title={t("Overview")}
-        description={t("See the latest submissions and jump into the registry.")}
         others={
           <Can permission="establishments.view_establishment">
             <Button variant="outline" asChild>

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useApiQuery } from "@/features/shared/api";
 import { api, errorMessage, type OdkProject } from "@/lib/api";
+import { notify } from "@/lib/notify";
 
 export default function OdkProjectsDialog({
   open,
@@ -34,9 +35,14 @@ export default function OdkProjectsDialog({
   const create = useMutation({
     mutationFn: (value: string) => api.post("/odk/projects/", { name: value }),
     onSuccess: () => {
+      notify.success(t("{{entity}} created.", { entity: t("ODK project") }));
       setName("");
       invalidate();
     },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
   const update = useMutation({
     mutationFn: ({
@@ -47,6 +53,13 @@ export default function OdkProjectsDialog({
       name?: string;
       archived?: boolean;
     }) => api.patch(`/odk/projects/${id}/`, body),
+    onSuccess: () => {
+      notify.success(t("{{entity}} updated.", { entity: t("ODK project") }));
+    },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
     onSettled: () => {
       setEditId(null);
       invalidate();

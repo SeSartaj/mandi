@@ -1,10 +1,20 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.db.models.functions import Lower
 
 
 class User(AbstractUser):
     display_name = models.CharField(max_length=200, blank=True)
     position = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                Lower("email"),
+                condition=~models.Q(email=""),
+                name="accounts_user_unique_email",
+            )
+        ]
 
     restrict_checklist_access = models.BooleanField(
         default=False,

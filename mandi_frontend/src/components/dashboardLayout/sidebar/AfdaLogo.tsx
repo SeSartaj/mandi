@@ -11,7 +11,7 @@ export function AfdaLogo() {
           <Link to="/">
             <img src="/afda_logo.png" alt="AFDA" className="size-8 rounded-md object-contain" />
             <div className="grid min-w-0 flex-1 text-start text-sm leading-tight">
-              <span className="truncate font-medium">Mandi</span>
+              <span className="truncate font-medium">د خوړو او درملو معینیت</span>
               <span className="text-muted-foreground truncate text-xs">
                 {t("Monitoring & inspection")}
               </span>

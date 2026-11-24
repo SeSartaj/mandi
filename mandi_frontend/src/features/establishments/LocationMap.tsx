@@ -109,17 +109,6 @@ export default function LocationMap({
       <p className="text-muted-foreground mt-2 text-sm">
         {t("Blue: selected establishment. Orange: nearby establishments within 5 km.")}
       </p>
-      <p role="status" className="text-muted-foreground mt-1 text-sm">
-        {nearby.isPending
-          ? t("Loading nearby establishments…")
-          : nearby.error
-            ? t("Nearby establishments could not load.")
-            : nearby.data?.results.filter((row) => row.id !== id).length === 0
-              ? t("No nearby establishments with saved coordinates.")
-              : nearby.data && nearby.data.count > 100
-                ? t("Showing the closest 100 establishments.")
-                : null}
-      </p>
       {failed && (
         <p role="status" className="text-muted-foreground mt-2 text-sm">
           {t("The map could not load. Check your connection.")}

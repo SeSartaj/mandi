@@ -1,15 +1,15 @@
-Integrate the Licensing API into this Registration app for four application categories: Company, Factory, Pharmacy, and Wholesale. Use the app’s existing backend, authentication, and UI conventions.
+Integrate the Licensing API into Mandi for four application categories: Company, Factory, Pharmacy, and Wholesale. Use the app’s existing backend, authentication, and UI conventions.
 
 ACCESS
 
-Set LICENSING_BASE_URL to the Licensing backend origin, for example https://licensing.example.com. Set LICENSING_REGISTRATION_API_KEY in the Registration app’s server environment. Its value must match REGISTRATION_API_KEY on the Licensing backend.
+Set LICENSING_BASE_URL to the Licensing backend origin, for example https://licensing.example.com. Set LICENSING_REGISTRATION_API_KEY in Mandi’s server environment. Its value must match REGISTRATION_API_KEY on the Licensing backend.
 
 Send these headers on every request:
 
     X-API-KEY: <LICENSING_REGISTRATION_API_KEY>
     Accept: application/json
 
-Call Licensing from the Registration app’s backend. Keep the API key in server-side configuration and enforce the Registration app’s own user permissions before returning records. Full details can contain national ID numbers, passport information, personal contact details, and document URLs. Return only the fields the current screen and user need.
+Call Licensing from Mandi’s backend. Keep the API key in server-side configuration and enforce Mandi’s own user permissions before returning records. Full details can contain national ID numbers, passport information, personal contact details, and document URLs. Return only the fields the current screen and user need.
 
 ENDPOINTS
 

@@ -1,5 +1,6 @@
 import io
 import uuid
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import requests
@@ -19,6 +20,7 @@ from apps.integrations.odk import request as odk_request
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
+from django.utils import timezone
 from openpyxl import Workbook, load_workbook
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
@@ -74,6 +76,33 @@ class CollectionWorkflowTests(TestCase):
 
     def tearDown(self):
         self.checklist.xlsform.delete(save=False)
+
+    def test_establishment_detail_reports_inspection_counters(self):
+        older = timezone.now() - timedelta(days=800)
+        for index, submitted_at in enumerate(
+            [timezone.now(), timezone.now(), older], start=1
+        ):
+            CollectionSubmission.objects.create(
+                deployment=self.deployment,
+                submission_id=f"submission-{index}",
+                establishment=self.establishment,
+                submitted_at=submitted_at,
+                data={},
+            )
+        response = self.client.get(f"/api/v1/establishments/{self.establishment.pk}/")
+        self.assertEqual(response.status_code, 200)
+        stats = response.data["inspection_stats"]
+        self.assertEqual(stats["total"], 3)
+        self.assertEqual(stats["this_year"], 2)
+        self.assertIsNotNone(stats["last_submitted_at"])
+
+    def test_establishment_detail_reports_empty_counters_without_submissions(self):
+        response = self.client.get(f"/api/v1/establishments/{self.establishment.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["inspection_stats"],
+            {"total": 0, "this_year": 0, "last_submitted_at": None},
+        )
 
     @patch("apps.integrations.collection.sync_entities", return_value={"failed": 0})
     @patch("apps.integrations.collection.ensure_dataset", return_value="establishments")

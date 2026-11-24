@@ -12,6 +12,7 @@ import FormInput from "@/components/ui/custom/CustomInput";
 import FormSelect from "@/components/ui/custom/CustomSelect";
 import FormTextarea from "@/components/ui/custom/CustomTextarea";
 import { api, errorMessage } from "@/lib/api";
+import { notify } from "@/lib/notify";
 import type { Establishment } from "@/lib/api";
 import { choiceLabel } from "@/features/shared/labels";
 
@@ -55,10 +56,17 @@ export default function EstablishmentForm({
       ).data;
     },
     onSuccess: (data) => {
+      notify.success(t(existing ? "{{entity}} updated." : "{{entity}} created.", {
+        entity: t("Establishment"),
+      }));
       client.invalidateQueries();
       onClose();
       navigate(`/establishments/${data.id}`);
     },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
 
   return (

@@ -9,7 +9,7 @@ from .licensing import KIND_CATEGORIES, candidate
 from .registry import adapter_for
 
 
-def sync_batch(actor, source="registration", page_size=50, selected_kinds=None):
+def sync_batch(actor, source="licensing", page_size=50, selected_kinds=None):
     for permission in ("view_establishment", "view_sourcelink", "add_establishment", "change_establishment", "change_sourcelink"):
         require(actor, f"establishments.{permission}")
     page_size = min(100, max(1, int(page_size)))
@@ -75,7 +75,7 @@ def sync_batch(actor, source="registration", page_size=50, selected_kinds=None):
                 cursor.execute("SELECT pg_advisory_unlock(%s)", [628194201])
 
 
-def sync_all(actor, source="registration", page_size=100):
+def sync_all(actor, source="licensing", page_size=100):
     """One complete pass for initial imports/backfills; normal polling stays bounded."""
     for permission in ("view_establishment", "view_sourcelink", "add_establishment", "change_establishment", "change_sourcelink"):
         require(actor, f"establishments.{permission}")

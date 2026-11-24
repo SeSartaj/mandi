@@ -19,6 +19,7 @@ export default function DashboardLayout() {
     const section = pathname.split("/")[1];
     const titles: Record<string, string> = {
       establishments: "Establishments",
+      "external-systems": "External systems",
       checklists: "Checklists",
       submissions: "Submissions",
       employees: "Employees",

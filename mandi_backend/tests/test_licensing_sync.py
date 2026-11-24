@@ -6,12 +6,12 @@ from rest_framework.exceptions import NotFound, ValidationError
 from apps.establishments.models import Establishment, EstablishmentType, RegistrySyncCursor, SourceLink
 from apps.establishments.services import transfer_ownership, save_establishment
 from apps.integrations.licensing import LicensingError
-from apps.integrations.registry import ADAPTERS, RegistrationAdapter
+from apps.integrations.registry import ADAPTERS, LicensingAdapter
 from apps.integrations.registry_sync import sync_batch
 
 
-@override_settings(REGISTRATION_BASE_URL="http://registration.test:9000", REGISTRATION_API_KEY="registration-test-key", REGISTRATION_TIMEOUT=3)
-class RegistrationSyncTests(TestCase):
+@override_settings(LICENSING_BASE_URL="http://licensing.test:9000", LICENSING_REGISTRATION_API_KEY="licensing-test-key", LICENSING_TIMEOUT=3)
+class LicensingSyncTests(TestCase):
     def setUp(self):
         self.actor = get_user_model().objects.create_superuser(username="sync-manager", password="test-password")
         EstablishmentType.objects.exclude(pk="pharmacy").update(is_active=False)
@@ -19,7 +19,7 @@ class RegistrationSyncTests(TestCase):
         self.adapter.list_page.return_value = {"results": [{"application_id": "P-1", "name": "Pharmacy"}], "next": None}
         self.record = {"id": "pharmacy:P-1", "name": "Pharmacy", "details": {"name": "Pharmacy", "province": "Kabul", "status": "completed", "district": "District"}, "is_demo": False}
         self.adapter.identity.side_effect = lambda kind, external_id: deepcopy(self.record)
-        self.patcher = patch.dict(ADAPTERS, {"registration": self.adapter})
+        self.patcher = patch.dict(ADAPTERS, {"licensing": self.adapter})
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
 
@@ -27,7 +27,7 @@ class RegistrationSyncTests(TestCase):
         self.assertEqual(sync_batch(self.actor)["created"], 1)
         obj = Establishment.objects.get()
         self.assertEqual(obj.kind_id, "pharmacy")
-        self.assertEqual(obj.primary_source, "registration")
+        self.assertEqual(obj.primary_source, "licensing")
         self.record["name"] = "Updated pharmacy"
         self.record["details"]["province"] = "Herat"
         self.assertEqual(sync_batch(self.actor)["updated"], 1)
@@ -50,7 +50,7 @@ class RegistrationSyncTests(TestCase):
 
     def test_secondary_mapping_never_becomes_primary_implicitly(self):
         obj = save_establishment(self.actor, {"name": "Native", "kind": "pharmacy", "province": "Kabul"})
-        SourceLink.objects.create(establishment=obj, source="registration", external_id="pharmacy:P-1", linked_by=self.actor)
+        SourceLink.objects.create(establishment=obj, source="licensing", external_id="pharmacy:P-1", linked_by=self.actor)
         self.assertEqual(sync_batch(self.actor)["skipped"], 1)
         self.assertIsNone(obj.primary_source)
         self.assertEqual(Establishment.objects.count(), 1)
@@ -109,15 +109,15 @@ class RegistrationSyncTests(TestCase):
         self.assertEqual(RegistrySyncCursor.objects.get().next_page, 1)
 
     @patch("apps.integrations.licensing.requests.get")
-    def test_registration_uses_own_credentials_and_exact_contract(self, get):
+    def test_licensing_adapter_uses_configured_credentials_and_exact_contract(self, get):
         response = Mock(status_code=200)
         response.json.return_value = {"results": [], "next": None}
         get.return_value = response
-        adapter = RegistrationAdapter()
+        adapter = LicensingAdapter()
         for kind, category in [("importer", "company"), ("factory", "factory"), ("pharmacy", "pharmacy"), ("wholesaler", "wholesale")]:
             adapter.list_page(kind, 2, 50)
-            self.assertEqual(get.call_args.args[0], f"http://registration.test:9000/api/applications/{category}/registration/list/")
-            self.assertEqual(get.call_args.kwargs["headers"]["X-API-KEY"], "registration-test-key")
+            self.assertEqual(get.call_args.args[0], f"http://licensing.test:9000/api/applications/{category}/registration/list/")
+            self.assertEqual(get.call_args.kwargs["headers"]["X-API-KEY"], "licensing-test-key")
             self.assertEqual(get.call_args.kwargs["params"], {"page": 2, "page_size": 50, "ordering": "created_at"})
             self.assertFalse(get.call_args.kwargs["allow_redirects"])
         response.json.return_value = {"application_id": "ID /?#", "name": "Business", "address": None}

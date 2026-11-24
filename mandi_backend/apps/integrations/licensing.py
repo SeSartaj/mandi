@@ -207,20 +207,39 @@ def _person(person, staff=False):
     return {key: value for key, value in values.items() if value is not None and value != "" and value != {}}
 
 
+def _first(*values):
+    """The first value that is present, so Dari/English duplicates collapse."""
+    for value in values:
+        if value not in (None, "", {}, []):
+            return value
+    return None
+
+
 def _location(address, fallback_province=None):
+    """A readable address: one location per line, no duplicated upstream keys."""
     if not isinstance(address, dict):
         address = {"address": address}
     street = address.get("address")
     parts = street if isinstance(street, dict) else {}
+    village = _first(parts.get("village_name_fa"), parts.get("village_name"), address.get("village"))
+    neighborhood = _first(parts.get("neighborhood_fa"), parts.get("neighborhood"))
+    landmark = _first(parts.get("land_mark_fa"), parts.get("land_mark"))
     description = street if isinstance(street, str) else parts.get("not_precise_address")
     if not description:
-        description = " · ".join(dict.fromkeys(str(value).strip() for value in [parts.get("village_name_fa") or parts.get("village_name") or address.get("village"),
-            parts.get("neighborhood_fa") or parts.get("neighborhood"), parts.get("land_mark_fa") or parts.get("land_mark")] if value))
+        description = " · ".join(
+            dict.fromkeys(str(value).strip() for value in (village, neighborhood, landmark) if value)
+        )
     return {"Country": _name(address.get("country") or address.get("country_name")),
             "Province": (_name(address.get("province") or address.get("province_name")) or _name(fallback_province)),
             "District": _name(address.get("district") or address.get("district_name")),
-            "Address": street or description,
-            "Village": address.get("village"),
+            "Address": description or None,
+            "Neighborhood": _name(neighborhood) or neighborhood,
+            "Village": _name(village) or village,
+            "Landmark": _name(landmark) or landmark,
+            "Street": _first(parts.get("street"), parts.get("street_name")),
+            "House number": _first(parts.get("house_number"), parts.get("house number")),
+            "Floor": _first(parts.get("floor")),
+            "Market": _first(parts.get("market")),
             "Area": address.get("total_area")}
 
 

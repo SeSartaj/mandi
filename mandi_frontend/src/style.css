@@ -316,13 +316,23 @@ small {
 .info-grid dt,
 .details-list dt {
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: 13px;
   margin-bottom: 6px;
 }
 .info-grid dd,
 .details-list dd {
-  font-size: 14px;
+  font-size: 15px;
   overflow-wrap: anywhere;
+}
+/* The establishment profile is read and printed as one document. */
+.establishment-profile .info-grid dt {
+  font-size: 13px;
+}
+.establishment-profile .info-grid dd {
+  font-size: 15px;
+}
+.establishment-profile [data-slot="card-description"] {
+  font-size: 14px;
 }
 .section-title {
   margin: 24px 0 16px;
@@ -586,4 +596,120 @@ html[dir="rtl"] .back-link > svg {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
   border-radius: 2px;
+}
+
+/* Establishment profile: inspection counters and printable layout. */
+.stats-band {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.stats-band > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+.stats-band dt {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.stats-band dd {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .stats-band {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.print-only {
+  display: none;
+}
+@page {
+  margin: 14mm;
+}
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    overflow: visible !important;
+  }
+  /* Hide the workspace chrome; the profile itself is the printed document. */
+  [data-slot="sidebar"],
+  [data-slot="sidebar-gap"],
+  [data-slot="sidebar-rail"],
+  [data-slot="sidebar-trigger"],
+  [data-sonner-toaster],
+  header,
+  .skip-link,
+  .back-link {
+    display: none !important;
+  }
+  [data-slot="sidebar-inset"] {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  #main-content {
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  #main-content > div {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-profile-head {
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+    border-bottom: 2px solid #18181b;
+  }
+  .print-profile-head h1 {
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .print-profile-head p {
+    font-size: 12px;
+  }
+  .print-brand {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #52525b;
+  }
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  [data-slot="card"] {
+    border-color: #d4d4d8 !important;
+    break-inside: avoid;
+  }
+  .stats-band > div,
+  .establishment-profile section {
+    break-inside: avoid;
+  }
+  .establishment-profile {
+    font-size: 12px;
+  }
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
 }

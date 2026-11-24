@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useApiQuery } from "@/features/shared/api";
 import { api, errorMessage } from "@/lib/api";
+import { notify } from "@/lib/notify";
 import type {
   Checklist,
   CollectionProjectDirectory,
@@ -66,12 +67,17 @@ export function CollectAccessSection({
         )
       ).data,
     onSuccess: (data) => {
+      notify.success(t("Collection access issued."));
       setNewCredentials(data.credentials);
       setAdded(data.added);
       setUnchanged(data.unchanged);
       setSelected([]);
       client.invalidateQueries({ queryKey: ["collector-access", employee.id] });
     },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
 
   const revoke = useMutation({
@@ -80,11 +86,16 @@ export function CollectAccessSection({
         data: { grant_id: grantId },
       }),
     onSuccess: () => {
+      notify.success(t("Collection access revoked."));
       setNewCredentials([]);
       setAdded([]);
       setUnchanged([]);
       client.invalidateQueries({ queryKey: ["collector-access", employee.id] });
     },
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
   });
 
   const grouped = useMemo(() => groupDeployedChecklists(checklists), [checklists]);

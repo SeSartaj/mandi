@@ -16,6 +16,7 @@ import {
   ClipboardCheck,
   FileSpreadsheet,
   LayoutDashboard,
+  Plug,
   Users,
 } from "lucide-react";
 import { Link, useLocation } from "react-router";
@@ -24,6 +25,7 @@ import { Can } from "@/components/Can";
 const items = [
   ["/", "Overview", LayoutDashboard, "establishments.view_establishment"],
   ["/establishments", "Establishments", Building2, "establishments.view_establishment"],
+  ["/external-systems", "External systems", Plug, "establishments.view_establishment"],
   ["/submissions", "Submissions", ClipboardCheck, "establishments.view_establishment"],
   ["/checklists", "Checklists", FileSpreadsheet, "inspections.view_checklist"],
   ["/employees", "Employees", Users, "accounts.view_user"],

@@ -16,7 +16,7 @@ from apps.integrations.registry import ADAPTERS, detail_with_field_ids
 from apps.integrations.services import source_search
 
 
-@override_settings(LICENSING_BASE_URL="", REGISTRATION_BASE_URL="", REGISTRATION_API_KEY="")
+@override_settings(LICENSING_BASE_URL="", LICENSING_REGISTRATION_API_KEY="")
 class RegistryTests(TestCase):
     def setUp(self):
         self.actor = get_user_model().objects.create_superuser(username="registry-manager", password="test-password")
@@ -29,7 +29,7 @@ class RegistryTests(TestCase):
 
     def imported(self):
         with patch("apps.integrations.services.source_record", return_value=self.record()):
-            return import_establishment(self.actor, "registration", "external-42", "pharmacy")
+            return import_establishment(self.actor, "licensing", "external-42", "pharmacy")
 
     def submission(self, establishment):
         Checklist.objects.create(
@@ -56,16 +56,16 @@ class RegistryTests(TestCase):
     def test_import_is_idempotent_and_minimal(self):
         obj = self.imported()
         with patch("apps.integrations.services.source_record") as fetch:
-            repeated = import_establishment(self.actor, "registration", "external-42", "pharmacy")
+            repeated = import_establishment(self.actor, "licensing", "external-42", "pharmacy")
         fetch.assert_not_called()
         self.assertEqual(obj.pk, repeated.pk)
-        self.assertEqual(obj.primary_source, "registration")
+        self.assertEqual(obj.primary_source, "licensing")
         details = obj.source_links.get().details
         self.assertEqual(details["name"], "Registry pharmacy")
         self.assertEqual(details["province"], "Herat")
         self.assertEqual(details["license_number"], "LIC-42")
         with self.assertRaises(ValidationError):
-            import_establishment(self.actor, "registration", "external-42", "hospital")
+            import_establishment(self.actor, "licensing", "external-42", "hospital")
 
     def test_primary_identity_read_only_and_disconnect_protected(self):
         obj = self.imported()
@@ -73,7 +73,7 @@ class RegistryTests(TestCase):
             response = self.client.patch(f"/api/v1/establishments/{obj.pk}/", {key: value}, format="json")
             self.assertEqual(response.status_code, 400)
         with self.assertRaises(ValidationError):
-            disconnect_source(self.actor, obj.pk, "registration")
+            disconnect_source(self.actor, obj.pk, "licensing")
 
     def test_outage_leaves_local_identity_intact(self):
         obj = self.imported()
@@ -89,8 +89,8 @@ class RegistryTests(TestCase):
         transfer_ownership(self.actor, obj.pk)
         save_establishment(self.actor, {"name": "Local edit"}, obj.pk)
         with patch("apps.integrations.services.source_record", return_value=self.record("Upstream again")):
-            obj = transfer_ownership(self.actor, obj.pk, "registration")
-        self.assertEqual(obj.primary_source, "registration")
+            obj = transfer_ownership(self.actor, obj.pk, "licensing")
+        self.assertEqual(obj.primary_source, "licensing")
         self.assertEqual(obj.name, "Upstream again")
 
     def test_failed_transfer_rolls_back_ownership_and_identity(self):
@@ -98,14 +98,14 @@ class RegistryTests(TestCase):
         transfer_ownership(self.actor, obj.pk)
         with patch("apps.integrations.services.source_record", side_effect=ValidationError("Unavailable")):
             with self.assertRaises(ValidationError):
-                transfer_ownership(self.actor, obj.pk, "registration")
+                transfer_ownership(self.actor, obj.pk, "licensing")
         obj.refresh_from_db()
         self.assertIsNone(obj.primary_source)
         self.assertEqual(obj.name, "Registry pharmacy")
 
     def test_unique_primary_and_reverse_mapping_constraints(self):
         self.imported()
-        for params in [dict(establishment=self.native, source="registration", external_id="external-42"),
+        for params in [dict(establishment=self.native, source="licensing", external_id="external-42"),
                        dict(establishment=self.native, source="survey", external_id="a", is_primary=True)]:
             if params["source"] == "survey":
                 SourceLink.objects.create(establishment=self.native, source="archive", external_id="b", is_primary=True, linked_by=self.actor)
@@ -123,30 +123,31 @@ class RegistryTests(TestCase):
         with self.assertRaises(ValidationError):
             source_search(self.actor, "new-registry", "hospital")
 
-    def test_unconfigured_registration_never_returns_demo_records(self):
-        with self.assertRaisesMessage(ValidationError, "not configured"):
-            source_search(self.actor, "registration", "pharmacy")
+    def test_unconfigured_licensing_never_returns_demo_records(self):
+        with self.assertRaisesMessage(ValidationError, "not connected"):
+            source_search(self.actor, "licensing", "pharmacy")
 
     def test_mutation_permissions_enforced(self):
         user = get_user_model().objects.create_user(username="unauthorized")
         with self.assertRaises(PermissionDenied):
-            import_establishment(user, "registration", "external-42", "pharmacy")
+            import_establishment(user, "licensing", "external-42", "pharmacy")
 
     def test_import_and_ownership_api(self):
         with patch("apps.integrations.services.source_record", return_value=self.record()):
-            response = self.client.post("/api/v1/registry/import/", {"source": "registration", "kind": "pharmacy", "external_id": "external-42"})
+            response = self.client.post("/api/v1/registry/import/", {"source": "licensing", "kind": "pharmacy", "external_id": "external-42"})
         self.assertEqual(response.status_code, 201, response.data)
         pk = response.data["id"]
-        self.assertEqual(response.data["primary_source"], "registration")
+        self.assertEqual(response.data["primary_source"], "licensing")
         response = self.client.post(f"/api/v1/establishments/{pk}/ownership/", {"source": None}, format="json")
         self.assertEqual(response.status_code, 200, response.data)
         self.assertIsNone(response.data["primary_source"])
 
+    @override_settings(LICENSING_BASE_URL="http://licensing.test", LICENSING_REGISTRATION_API_KEY="key")
     def test_adapter_cannot_return_a_different_identity(self):
         from apps.integrations.services import source_record
         class WrongAdapter:
             def identity(self, *args):
                 return {"id": "wrong"}
-        with patch.dict(ADAPTERS, {"registration": WrongAdapter()}):
+        with patch.dict(ADAPTERS, {"licensing": WrongAdapter()}):
             with self.assertRaisesMessage(ValidationError, "different external ID"):
-                source_record(self.actor, "registration", "expected", "pharmacy")
+                source_record(self.actor, "licensing", "expected", "pharmacy")

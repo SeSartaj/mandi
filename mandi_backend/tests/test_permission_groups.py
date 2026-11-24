@@ -39,7 +39,7 @@ class PermissionGroupTests(TestCase):
         user = create_employee(
             administrator,
             {
-                "username": "new.viewer",
+                "email": "new.viewer@example.test",
                 "display_name": "Viewer",
                 "password": "Testing-2026!",
                 "group_ids": [viewer_group.pk],
@@ -47,6 +47,14 @@ class PermissionGroupTests(TestCase):
         )
         self.assertTrue(user.has_perm("establishments.view_establishment"))
         self.assertFalse(user.has_perm("establishments.add_establishment"))
+        with self.assertRaises(ValidationError):
+            create_employee(
+                administrator,
+                {
+                    "email": "NEW.VIEWER@example.test",
+                    "password": "Testing-2026!",
+                },
+            )
         creator = get_user_model().objects.create_user(username="creator")
         creator.user_permissions.add(
             Permission.objects.get(
@@ -57,7 +65,7 @@ class PermissionGroupTests(TestCase):
             create_employee(
                 creator,
                 {
-                    "username": "escalated",
+                    "email": "escalated@example.test",
                     "password": "Testing-2026!",
                     "group_ids": [viewer_group.pk],
                 },
@@ -66,7 +74,7 @@ class PermissionGroupTests(TestCase):
             create_employee(
                 administrator,
                 {
-                    "username": "invalid.group",
+                    "email": "invalid.group@example.test",
                     "password": "Testing-2026!",
                     "group_ids": [999999],
                 },
@@ -111,7 +119,7 @@ class PermissionGroupTests(TestCase):
         response = client.post(
             "/api/v1/employees/",
             {
-                "username": "api.viewer",
+                "email": "api.viewer@example.test",
                 "display_name": "API viewer",
                 "password": "Testing-2026!",
                 "group_ids": [group.pk],
@@ -120,7 +128,8 @@ class PermissionGroupTests(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertFalse(response.data["is_staff"])
-        user = get_user_model().objects.get(username="api.viewer")
+        user = get_user_model().objects.get(email="api.viewer@example.test")
+        self.assertEqual(user.username, "api.viewer@example.test")
         self.assertEqual(
             list(user.groups.values_list("name", flat=True)), ["Mandi viewers"]
         )

@@ -11,7 +11,6 @@ from rest_framework.exceptions import NotFound, ValidationError
 from apps.accounts.services import require
 
 from .models import Establishment, EstablishmentType, SourceLink
-from apps.integrations.registry import canonical_source
 
 
 def list_establishments(actor, filters):
@@ -28,11 +27,22 @@ def list_establishments(actor, filters):
         value = filters.get(field)
         if not value:
             continue
-        try:
-            qs = qs.filter(**{f"{field}_id": uuid.UUID(str(value))})
-        except (ValueError, TypeError):
-            qs = qs.filter(**{f"{field}__name__iexact": value})
+        key = _location_key(value)
+        if key is None:
+            qs = qs.filter(**{f"{field}__name__iexact": str(value)})
+        else:
+            qs = qs.filter(**{f"{field}_id": key})
     return qs
+
+
+def _location_key(value):
+    """Location filters accept a UUID, an integer ID or (as a fallback) a name."""
+    for parse in (uuid.UUID, int):
+        try:
+            return parse(str(value))
+        except (ValueError, TypeError):
+            continue
+    return None
 
 
 def get_establishment(actor, pk):
@@ -81,13 +91,18 @@ def _location_value(value, province=None):
     country, _ = Country.objects.get_or_create(
         code="AF", defaults={"name": "Afghanistan"}
     )
+    # Registries send the local name while the catalog stores the English one,
+    # so match either column before creating a row.
+    names = Q(name__iexact=value) | Q(name_local__iexact=value)
     if province is None:
-        return Province.objects.get_or_create(
-            country=country, name=value, defaults={"code": ""}
-        )[0]
-    return District.objects.get_or_create(
-        province=province, name=value, defaults={"code": ""}
-    )[0]
+        existing = Province.objects.filter(names, country=country).order_by("-code").first()
+        if existing:
+            return existing
+        return Province.objects.create(country=country, name=value, code="")
+    existing = District.objects.filter(names, province=province).order_by("-code").first()
+    if existing:
+        return existing
+    return District.objects.create(province=province, name=value, code="")
 
 
 def _type_value(value):
@@ -150,7 +165,6 @@ def save_establishment(actor, data, pk=None):
 
 @transaction.atomic
 def connect_source(actor, pk, source, external_id):
-    source = canonical_source(source)
     require(actor, "establishments.change_sourcelink")
     obj = Establishment.objects.select_for_update().get(pk=get_establishment(actor, pk).pk)
     from apps.integrations.services import source_record
@@ -181,7 +195,6 @@ def connect_source(actor, pk, source, external_id):
 
 @transaction.atomic
 def disconnect_source(actor, pk, source):
-    source = canonical_source(source)
     require(actor, "establishments.change_sourcelink")
     obj = Establishment.objects.select_for_update().get(pk=get_establishment(actor, pk).pk)
     link = SourceLink.objects.filter(establishment=obj, source=source).first()
@@ -340,7 +353,6 @@ def _apply_identity(obj, identity):
 
 @transaction.atomic
 def import_establishment(actor, source, external_id, kind):
-    source = canonical_source(source)
     require(actor, "establishments.add_establishment")
     require(actor, "establishments.view_establishment")
     require(actor, "establishments.view_sourcelink")
@@ -413,7 +425,6 @@ def transfer_ownership(actor, pk, source=None):
 
 @transaction.atomic
 def sync_registry_record(actor, source, kind, record):
-    source = canonical_source(source)
     """Apply a trusted adapter projection; never reclaim locally owned mappings."""
     require(actor, "establishments.add_establishment")
     require(actor, "establishments.change_establishment")
@@ -459,7 +470,7 @@ def sync_registry_record(actor, source, kind, record):
 
 @transaction.atomic
 def sync_related_mappings(actor, establishment, source, record):
-    if source not in {"registration", "licensing"}:
+    if source != "licensing":
         return
     for related_source, external_id in record.get("external_mappings", {}).items():
         if related_source not in {"archive", "survey"}:

@@ -56,14 +56,21 @@ export function DeferredMap({ location }: { location: { latitude: number; longit
 }
 
 function label(key: string) {
-  return (
-    (
-      { name_fa: "Dari name", name_en: "English name", name_ps: "Pashto name" } as Record<
-        string,
-        string
-      >
-    )[key] || key.replaceAll("_", " ")
-  );
+  const mapped: Record<string, string> = {
+    name_fa: "Dari name",
+    name_en: "English name",
+    name_ps: "Pashto name",
+    "land mark": "Landmark",
+    "land mark fa": "Landmark",
+    "village name": "Village",
+    "village name fa": "Village",
+    "neighborhood fa": "Neighborhood",
+    "house number": "House number",
+    not_precise_address: "Address",
+  };
+  if (mapped[key]) return mapped[key];
+  const words = key.replaceAll("_", " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 export function SourceValue({ value }: { value: unknown }) {
   const { t, i18n } = useTranslation();
@@ -72,10 +79,13 @@ export function SourceValue({ value }: { value: unknown }) {
   if (typeof value === "boolean") return <span>{t(value ? "Yes" : "No")}</span>;
   if (Array.isArray(value))
     return value.length ? (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {value.map((item, i) => (
-          <div key={i} className="rounded border p-3">
-            <SourceValue value={item} />
+          <div key={i} className="flex gap-3">
+            <span className="text-muted-foreground mt-0.5 text-xs tabular-nums">{i + 1}.</span>
+            <div className="min-w-0 flex-1">
+              <SourceValue value={item} />
+            </div>
           </div>
         ))}
       </div>
@@ -107,8 +117,8 @@ export function SourceValue({ value }: { value: unknown }) {
               key={key}
               className={typeof item === "object" ? "min-w-0 sm:col-span-2" : "min-w-0"}
             >
-              <dt className="text-muted-foreground text-xs capitalize">{t(label(key))}</dt>
-              <dd className="mt-1 break-words whitespace-pre-wrap">
+              <dt className="text-muted-foreground text-sm">{t(label(key))}</dt>
+              <dd className="mt-1 text-base break-words whitespace-pre-wrap">
                 <SourceValue value={item} />
               </dd>
             </div>
@@ -127,15 +137,24 @@ export function SourceValue({ value }: { value: unknown }) {
     new: "New",
     renewal: "Renewal",
     re_register: "Re-registration",
+    new_company: "New company",
+    register: "Register",
+    renew: "Renewal",
     morning: "Morning",
     evening: "Evening",
     night: "Night",
+    day: "Day",
     bachelor: "Bachelor",
+    bachelor_degree: "Bachelor's degree",
     master: "Master",
+    master_degree: "Master's degree",
     pharmacy: "Pharmacy",
     factory: "Factory",
     wholesale: "Wholesaler",
+    wholesaler: "Wholesaler",
     company: "Importer",
+    yes: "Yes",
+    no: "No",
   };
   if (/^https?:\/\//i.test(text))
     return (
@@ -143,48 +162,54 @@ export function SourceValue({ value }: { value: unknown }) {
         {t("Open document")}
       </a>
     );
+  // Upstream sends machine codes such as `new_factory`; show them as words.
+  const display = statuses[text]
+    ? t(statuses[text])
+    : /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(text)
+      ? t(text.charAt(0).toUpperCase() + text.replaceAll("_", " ").slice(1))
+      : text;
   return (
     <span dir="auto" className="break-words whitespace-pre-wrap">
-      {statuses[text] ? t(statuses[text]) : text}
+      {display}
     </span>
   );
 }
-function SectionFields({ section }: { section: SourceDetail["sections"][number] }) {
+function SectionFields({
+  section,
+  showLocationMap,
+}: {
+  section: SourceDetail["sections"][number];
+  showLocationMap: boolean;
+}) {
   const { t } = useTranslation();
   return (
     <>
-      <dl className="grid min-w-0 gap-x-8 gap-y-5 sm:grid-cols-2">
-        {section.fields.map((field, i) => (
-          <div
-            key={i}
-            className={
-              typeof field.value === "object" && field.value !== null
-                ? "min-w-0 sm:col-span-2"
-                : "min-w-0"
-            }
-          >
-            <dt
-              className={
-                typeof field.value === "object" && field.value !== null
-                  ? "mb-2 text-sm font-semibold"
-                  : "text-muted-foreground mb-1 text-sm"
-              }
-            >
-              {t(field.label)}
-            </dt>
-            <dd
-              className={
-                typeof field.value === "object" && field.value !== null
-                  ? "bg-muted/10 rounded-lg border p-4 text-sm"
-                  : "text-sm"
-              }
-            >
-              <SourceValue value={field.value} />
-            </dd>
-          </div>
-        ))}
+      <dl className="grid min-w-0 gap-x-8 gap-y-6 sm:grid-cols-2">
+        {section.fields.map((field, i) => {
+          const nested = typeof field.value === "object" && field.value !== null;
+          return (
+            <div key={i} className={nested ? "min-w-0 sm:col-span-2" : "min-w-0"}>
+              <dt
+                className={
+                  nested
+                    ? "mb-2 text-sm font-semibold"
+                    : "text-muted-foreground mb-1 text-sm"
+                }
+              >
+                {t(field.label)}
+              </dt>
+              <dd className="text-base leading-relaxed">
+                <SourceValue value={field.value} />
+              </dd>
+            </div>
+          );
+        })}
       </dl>
-      {section.location && <DeferredMap location={section.location} />}
+      {section.location && showLocationMap && (
+        <div className="mt-5">
+          <DeferredMap location={section.location} />
+        </div>
+      )}
     </>
   );
 }
@@ -192,9 +217,11 @@ function SectionFields({ section }: { section: SourceDetail["sections"][number] 
 export default function SourceDetails({
   data,
   stacked = false,
+  showLocationMap = true,
 }: {
   data: SourceDetail;
   stacked?: boolean;
+  showLocationMap?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -202,11 +229,11 @@ export default function SourceDetails({
       {data.notice && <p className="text-muted-foreground text-sm">{t(data.notice)}</p>}
       {!!data.sections.length &&
         (stacked ? (
-          <div className="space-y-6">
+          <div className="divide-border divide-y">
             {data.sections.map((section, index) => (
-              <section key={index} className="space-y-3">
-                <h3 className="font-semibold">{t(section.title)}</h3>
-                <SectionFields section={section} />
+              <section key={index} className="space-y-4 py-5 first:pt-0 last:pb-0">
+                <h3 className="text-lg font-semibold">{t(section.title)}</h3>
+                <SectionFields section={section} showLocationMap={showLocationMap} />
               </section>
             ))}
           </div>
@@ -220,9 +247,9 @@ export default function SourceDetails({
               ))}
             </TabsList>
             {data.sections.map((section, index) => (
-              <TabsContent key={index} value={`section-${index}`} className="space-y-3 pt-3">
-                <h3 className="font-semibold">{t(section.title)}</h3>
-                <SectionFields section={section} />
+              <TabsContent key={index} value={`section-${index}`} className="space-y-4 pt-4">
+                <h3 className="text-lg font-semibold">{t(section.title)}</h3>
+                <SectionFields section={section} showLocationMap={showLocationMap} />
               </TabsContent>
             ))}
           </Tabs>

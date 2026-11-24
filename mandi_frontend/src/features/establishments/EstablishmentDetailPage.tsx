@@ -3,7 +3,7 @@ import { useLocationName } from "@/features/establishments/registry";
 import RegistryOwnership from "@/features/establishments/RegistryOwnership";
 import { EditButton } from "@/components/public/ActionButton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, RefreshCw } from "lucide-react";
+import { ExternalLink, Printer, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
@@ -26,6 +26,7 @@ import { choiceLabel, pageCount } from "@/features/shared/labels";
 import { useTablePageSize } from "@/hooks/useTablePageSize";
 import type { Establishment, Page, Submission } from "@/lib/api";
 import { api, errorMessage } from "@/lib/api";
+import { notify } from "@/lib/notify";
 import { useSession } from "@/lib/session";
 
 function scoreVariant(percent: number | null | undefined) {
@@ -78,6 +79,28 @@ function ScoreBar({ percent }: { percent: number | null }) {
   );
 }
 
+function InspectionStats({ stats }: { stats: Establishment["inspection_stats"] }) {
+  const { t } = useTranslation();
+  return (
+    <dl className="stats-band">
+      <div>
+        <dt>{t("Total inspections")}</dt>
+        <dd>{stats?.total ?? 0}</dd>
+      </div>
+      <div>
+        <dt>{t("Inspections this year")}</dt>
+        <dd>{stats?.this_year ?? 0}</dd>
+      </div>
+      <div>
+        <dt>{t("Last inspection")}</dt>
+        <dd className="text-base">
+          <SystemDateTime value={stats?.last_submitted_at ?? null} />
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 export default function EstablishmentDetailPage() {
   const { t } = useTranslation();
   const locationName = useLocationName();
@@ -107,6 +130,11 @@ export default function EstablishmentDetailPage() {
   );
   const syncSubmissions = useMutation({
     mutationFn: () => api.post("/integrations/collection/sync/", { establishment_id: id }),
+    onSuccess: () => notify.success(t("Submissions synced.")),
+    onError: (error) =>
+      notify.error(t("Could not complete the action."), {
+        description: errorMessage(error),
+      }),
     onSettled: () => client.invalidateQueries({ queryKey: ["collection-submissions", id] }),
   });
 
@@ -121,35 +149,41 @@ export default function EstablishmentDetailPage() {
   const submissionCount = submissions.data?.count ?? 0;
 
   return (
-    <div className="space-y-6">
-      <Link className="back-link" to={`/establishments?kind=${establishment.kind}`}>
-        <ArrowLeft size={16} />
-        {t("Establishments")}
-      </Link>
-      <AppTitle
-        title={establishment.name}
-        description={`${t(choiceLabel(establishment.kind))} · ${locationName(establishment.province_name, establishment.province_name_local)}`}
-        others={
-          <Can permission="establishments.change_establishment">
-            <EditButton
-              variant="secondary"
-              disabled={!!establishment.primary_source}
-              onClick={() => setEdit(true)}
-              label={t("Edit details")}
-            />
-          </Can>
-        }
-      />
+    <div className="establishment-profile space-y-6">
+      <div className="print-only print-profile-head">
+        <p className="print-brand">Afghanistan Food and Drug Authority · Monitoring &amp; inspection</p>
+        <h1>{establishment.name}</h1>
+        <p>
+          {t(choiceLabel(establishment.kind))} ·{" "}
+          {locationName(establishment.province_name, establishment.province_name_local)}
+        </p>
+      </div>
+      <div className="print:hidden">
+        <AppTitle
+          title={establishment.name}
+          description={`${t(choiceLabel(establishment.kind))} · ${locationName(establishment.province_name, establishment.province_name_local)}`}
+          others={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" onClick={() => window.print()}>
+                <Printer />
+                {t("Print profile")}
+              </Button>
+              <Can permission="establishments.change_establishment">
+                <EditButton
+                  variant="secondary"
+                  disabled={!!establishment.primary_source}
+                  onClick={() => setEdit(true)}
+                  label={t("Edit details")}
+                />
+              </Can>
+            </div>
+          }
+        />
+      </div>
 
-      <PageSection
-        title={t("Establishment overview")}
-        description={t(
-          establishment.primary_source
-            ? "Identity synced from Licensing. Source details are shown below."
-            : "Identity managed in Mandi.",
-        )}
-        contentClassName="pt-4"
-      >
+      <InspectionStats stats={establishment.inspection_stats} />
+
+      <PageSection title={t("Establishment overview")}>
         <dl className="info-grid">
           {([
             ["Province", locationName(establishment.province_name, establishment.province_name_local)],
@@ -160,7 +194,7 @@ export default function EstablishmentDetailPage() {
           ] as [string, string | number | null][]).map(([label, value]) => (
             <div key={label}>
               <dt>{t(label)}</dt>
-              <dd>{value ?? "—"}</dd>
+              <dd>{value === null || value === "" || value === undefined ? "—" : value}</dd>
             </div>
           ))}
         </dl>
@@ -169,7 +203,7 @@ export default function EstablishmentDetailPage() {
             <DeferredMap location={location} />
           </div>
         )}
-        <details className="mt-4 border-t pt-4">
+        <details className="mt-4 border-t pt-4 print:hidden">
           <summary className="cursor-pointer text-sm">
             {t("Identity and source management")}
           </summary>
@@ -187,7 +221,7 @@ export default function EstablishmentDetailPage() {
           )}
           actions={
             <Link
-              className="text-link"
+              className="text-link print:hidden"
               to={`/establishments/${establishment.id}/sources/licensing`}
             >
               {t("Open full profile")}
@@ -202,13 +236,15 @@ export default function EstablishmentDetailPage() {
               onRetry={() => licensing.refetch()}
             />
           ) : licensing.data ? (
-            <SourceDetails data={licensing.data} stacked />
+            <SourceDetails data={licensing.data} stacked showLocationMap={false} />
           ) : null}
         </PageSection>
       ) : null}
 
       <Can permission="establishments.view_sourcelink">
-        <EstablishmentMappings establishment={establishment} />
+        <div className="print:hidden">
+          <EstablishmentMappings establishment={establishment} />
+        </div>
       </Can>
 
       <PageSection
@@ -220,6 +256,7 @@ export default function EstablishmentDetailPage() {
           <Can permission="inspections.deploy_checklist">
             <Button
               variant="outline"
+              className="print:hidden"
               disabled={syncSubmissions.isPending}
               onClick={() => syncSubmissions.mutate()}
             >
@@ -261,7 +298,7 @@ export default function EstablishmentDetailPage() {
                 <TableHead>{t("Submitted")}</TableHead>
                 <TableHead>{t("Checklist")}</TableHead>
                 <TableHead>{t("Score")}</TableHead>
-                <TableHead>{t("Action")}</TableHead>
+                <TableHead className="print:hidden">{t("Action")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -281,7 +318,7 @@ export default function EstablishmentDetailPage() {
                   <TableCell>
                     <ScoreBadge percent={submission.scores?.percent} />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="print:hidden">
                     <div className="inline-actions">
                       <Button
                         size="sm"
