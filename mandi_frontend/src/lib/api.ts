@@ -162,6 +162,20 @@ export type EstablishmentType = {
   name: string;
   is_active: boolean;
 };
+export type ChecklistQuestion = {
+  name: string;
+  label: string;
+  type: string;
+  group: string;
+  choices: { value: string; label: string }[];
+};
+export type SubmissionGroup = {
+  checklist_id: number;
+  checklist_name: string;
+  count: number;
+  last_submitted_at: string | null;
+  submissions: Submission[];
+};
 export type OdkProject = {
   id: number;
   name: string;

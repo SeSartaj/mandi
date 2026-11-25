@@ -1,6 +1,7 @@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { pharmacyTypeLabel } from "@/features/shared/labels";
 
 export type SourceDetail = {
   name: string;
@@ -16,7 +17,15 @@ export type SourceDetail = {
 
 const LocationMap = lazy(() => import("./LocationMap"));
 
-export function DeferredMap({ location }: { location: { latitude: number; longitude: number } }) {
+export function DeferredMap({
+  location,
+  name,
+  address,
+}: {
+  location: { latitude: number; longitude: number };
+  name?: string;
+  address?: string | null;
+}) {
   const { t } = useTranslation();
   const container = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
@@ -46,7 +55,7 @@ export function DeferredMap({ location }: { location: { latitude: number; longit
     <div ref={container} className="min-h-64">
       {visible ? (
         <Suspense fallback={placeholder}>
-          <LocationMap {...location} />
+          <LocationMap {...location} name={name} address={address} />
         </Suspense>
       ) : (
         placeholder
@@ -199,7 +208,13 @@ function SectionFields({
                 {t(field.label)}
               </dt>
               <dd className="text-base leading-relaxed">
-                <SourceValue value={field.value} />
+                <SourceValue
+                  value={
+                    field.label === "Pharmacy type"
+                      ? pharmacyTypeLabel(field.value as string | number | null) || field.value
+                      : field.value
+                  }
+                />
               </dd>
             </div>
           );

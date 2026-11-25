@@ -28,8 +28,10 @@ type Candidate = {
 
 export default function EstablishmentMappings({
   establishment,
+  embedded = false,
 }: {
   establishment: Establishment;
+  embedded?: boolean;
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -100,21 +102,16 @@ export default function EstablishmentMappings({
     setOpen(true);
   };
 
-  return (
-    <PageSection
-      title={t("System mappings")}
-      description={t(
-        "Connect this establishment to a record in another system. The system and external ID are stored on the establishment.",
-      )}
-      actions={
-        <Can permission="establishments.change_sourcelink">
-          <Button onClick={openDialog} disabled={!available.length}>
-            <Plus />
-            {t("Map to another system")}
-          </Button>
-        </Can>
-      }
-    >
+  const connectButton = (
+    <Can permission="establishments.change_sourcelink">
+      <Button onClick={openDialog} disabled={!available.length}>
+        <Plus />
+        {t("Map to another system")}
+      </Button>
+    </Can>
+  );
+  const body = (
+    <>
       {establishment.source_links.length ? (
         <div className="space-y-3">
           {establishment.source_links.map((link) => (
@@ -314,6 +311,25 @@ export default function EstablishmentMappings({
           </div>
         ) : null}
       </AppDialog>
+    </>
+  );
+  if (embedded) {
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">{connectButton}</div>
+        {body}
+      </div>
+    );
+  }
+  return (
+    <PageSection
+      title={t("System mappings")}
+      description={t(
+        "Connect this establishment to a record in another system. The system and external ID are stored on the establishment.",
+      )}
+      actions={connectButton}
+    >
+      {body}
     </PageSection>
   );
 }

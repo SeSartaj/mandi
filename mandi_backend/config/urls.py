@@ -8,7 +8,7 @@ from .api.establishments import NearbyEstablishments, RegistryCatalog, RegistryI
 from .schema import Schema
 from .api.checklists import ChecklistDownload
 from .api.accounts import EmployeeDetail
-from .api.collection import CollectionSync, CollectionSubmissions, CollectionSubmissionDetail, CollectorAccess, CollectionAttachment, CollectionProjects, EntitySync
+from .api.collection import CollectionSync, CollectionSubmissions, CollectionSubmissionDetail, CollectorAccess, CollectionAttachment, CollectionProjects, EntitySync, ChecklistQuestions, EstablishmentSubmissionGroups
 
 
 def health(request):
@@ -42,9 +42,11 @@ urlpatterns = [
     path("api/v1/odk/projects/<int:project_id>/", api.OdkProjectDetail.as_view()),
     path("api/v1/integrations/establishments.csv", api.EstablishmentsCsv.as_view()),
     path("api/v1/checklists/<int:pk>/collection-submissions/", CollectionSubmissions.as_view()),
+    path("api/v1/checklists/<int:pk>/questions/", ChecklistQuestions.as_view()),
     path("api/v1/submissions/", CollectionSubmissions.as_view()),
     path("api/v1/checklists/<int:pk>/versions/", api.ChecklistVersions.as_view()),
     path("api/v1/establishments/<uuid:establishment_pk>/collection-submissions/", CollectionSubmissions.as_view()),
+    path("api/v1/establishments/<uuid:establishment_pk>/collection-groups/", EstablishmentSubmissionGroups.as_view()),
     path("api/v1/collection-submissions/<int:pk>/attachments/<int:index>/", CollectionAttachment.as_view()),
     path("api/v1/collection-submissions/<int:pk>/", CollectionSubmissionDetail.as_view()),
     path("api/health/", health),

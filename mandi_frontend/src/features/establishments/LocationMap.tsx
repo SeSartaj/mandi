@@ -1,33 +1,109 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AttributionControl,
-  LngLatBounds,
   Map,
   Marker,
   NavigationControl,
   Popup,
 } from "maplibre-gl";
 import { useApiQuery } from "@/features/shared/api";
+import { localizeAddress, pharmacyTypeLabel } from "@/features/shared/labels";
+import { useDistrictName } from "@/features/establishments/registry";
 import { useParams } from "react-router";
 import "maplibre-gl/dist/maplibre-gl.css";
+
+type PopupItem = {
+  name: string;
+  address?: string | null;
+  province?: string | null;
+  district?: string | null;
+  house_number?: string | null;
+  floor?: string | null;
+  market?: string | null;
+  pharmacy_type?: string | number | null;
+  href?: string;
+};
+
+type NearbyRow = PopupItem & { id: string; latitude: number; longitude: number };
 
 export default function LocationMap({
   latitude,
   longitude,
+  name,
+  address,
 }: {
   latitude: number;
   longitude: number;
+  name?: string;
+  address?: string | null;
 }) {
   const { t } = useTranslation();
+  const districtName = useDistrictName();
   const { id } = useParams();
-  const nearby = useApiQuery<{
-    results: { id: string; name: string; address: string; latitude: number; longitude: number }[];
-    count: number;
-  }>(["nearby-establishments"], "/establishments/nearby/", { latitude, longitude });
+  const nearby = useApiQuery<{ results: NearbyRow[]; count: number }>(
+    ["nearby-establishments"],
+    "/establishments/nearby/",
+    { latitude, longitude },
+  );
   const mapRef = useRef<Map | null>(null);
+  const currentMarkerRef = useRef<Marker | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
+  const buildPopup = useCallback(
+    (item: PopupItem) => {
+      const content = document.createElement("div");
+      content.dir = "auto";
+      content.className = "min-w-56 overflow-hidden text-sm text-slate-900";
+      const title = document.createElement(item.href ? "a" : "span");
+      title.textContent = item.name || t("Establishment");
+      if (item.href && title instanceof HTMLAnchorElement) {
+        title.href = item.href;
+        title.className = "font-semibold text-sky-700 hover:underline";
+      } else {
+        title.className = "font-semibold";
+      }
+      const addressText = document.createElement("span");
+      addressText.textContent = localizeAddress(item.address) || "—";
+      const rows: { label: string; value: string | HTMLElement }[] = [
+        { label: t("Name"), value: title },
+        { label: t("Province"), value: item.province || "—" },
+        { label: t("District"), value: districtName(item.district) || "—" },
+        { label: t("House number"), value: item.house_number || "—" },
+        { label: t("Floor"), value: item.floor || "—" },
+        { label: t("Market"), value: item.market || "—" },
+        { label: t("Address"), value: addressText },
+        {
+          label: t("Pharmacy type"),
+          value: pharmacyTypeLabel(item.pharmacy_type) || "—",
+        },
+      ];
+      for (const [index, lineItem] of rows.entries()) {
+        const line = document.createElement("div");
+        line.className = `grid grid-cols-[minmax(4.5rem,auto)_minmax(0,1fr)] items-start gap-3 px-3 py-2 ${
+          index % 2 === 0 ? "bg-slate-50" : "bg-white"
+        } ${index > 0 ? "border-t border-slate-200" : ""}`;
+        const label = document.createElement("span");
+        label.className = "text-xs leading-5 text-slate-500";
+        label.textContent = lineItem.label;
+        const value = document.createElement("span");
+        value.className = "font-semibold leading-5 break-words text-slate-900";
+        value.append(lineItem.value);
+        line.append(label, value);
+        content.append(line);
+      }
+      const popup = new Popup({
+        offset: 25,
+        className: "establishment-map-popup",
+      }).setDOMContent(content);
+      popup.on("open", () => {
+        const popupElement = popup.getElement();
+        if (popupElement) popupElement.style.zIndex = "20";
+      });
+      return popup;
+    },
+    [districtName, t],
+  );
   useEffect(() => {
     if (!container.current) return;
     let map: Map | undefined;
@@ -36,7 +112,7 @@ export default function LocationMap({
       map = new Map({
         container: container.current,
         center: [longitude, latitude],
-        zoom: 15,
+        zoom: 17,
         scrollZoom: false,
         attributionControl: false,
         style: {
@@ -56,7 +132,21 @@ export default function LocationMap({
       });
       mapRef.current = map;
       map.addControl(new AttributionControl({ compact: false }));
-      new Marker({ color: "#1e4976" }).setLngLat([longitude, latitude]).addTo(map);
+      const currentMarker = new Marker({ color: "#1e4976" }).setLngLat([
+        longitude,
+        latitude,
+      ]);
+      currentMarkerRef.current = currentMarker;
+      if (name || address) {
+        currentMarker.setPopup(
+          buildPopup({ name: name || t("Establishment"), address }),
+        );
+      }
+      currentMarker.addTo(map);
+      // The selected establishment must stay visible when nearby pins overlap it.
+      const currentElement = currentMarker.getElement();
+      currentElement.style.zIndex = "5";
+      currentElement.setAttribute("data-current-establishment", "true");
       map.addControl(new NavigationControl({ showCompass: false }), "top-right");
       map.on("error", () => setFailed(true));
       observer = new ResizeObserver(() => map?.resize());
@@ -66,37 +156,44 @@ export default function LocationMap({
     }
     return () => {
       observer?.disconnect();
+      currentMarkerRef.current = null;
       mapRef.current = null;
       map?.remove();
     };
-  }, [latitude, longitude]);
+  }, [address, buildPopup, latitude, longitude, name, t]);
+  const currentRow = nearby.data?.results.find((row) => row.id === id);
+  useEffect(() => {
+    const marker = currentMarkerRef.current;
+    if (!marker) return;
+    if (currentRow) {
+      marker.setPopup(buildPopup({ ...currentRow, href: undefined }));
+    } else if (name || address) {
+      marker.setPopup(buildPopup({ name: name || t("Establishment"), address }));
+    }
+  }, [address, buildPopup, currentRow, name, t]);
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const markers = (nearby.data?.results ?? [])
       .filter((row) => row.id !== id)
       .map((row) => {
-        const content = document.createElement("div");
-        content.dir = "auto";
-        const link = document.createElement("a");
-        link.href = `/establishments/${encodeURIComponent(row.id)}`;
-        link.textContent = row.name;
-        link.className = "text-link font-semibold";
-        const address = document.createElement("p");
-        address.textContent = row.address;
-        content.append(link, address);
         const marker = new Marker({ color: "#d97706", scale: 0.8 })
           .setLngLat([row.longitude, row.latitude])
-          .setPopup(new Popup({ offset: 25 }).setDOMContent(content))
+          .setPopup(
+            buildPopup({
+              name: row.name,
+              address: row.address,
+              href: `/establishments/${encodeURIComponent(row.id)}`,
+            }),
+          )
           .addTo(map);
-        marker.getElement().setAttribute("aria-label", row.name);
+        const element = marker.getElement();
+        element.style.zIndex = "1";
+        element.setAttribute("aria-label", row.name);
         return marker;
       });
-    const bounds = new LngLatBounds([longitude, latitude], [longitude, latitude]);
-    for (const row of nearby.data?.results ?? []) bounds.extend([row.longitude, row.latitude]);
-    if (markers.length) map.fitBounds(bounds, { padding: 45, maxZoom: 15, duration: 0 });
     return () => markers.forEach((marker) => marker.remove());
-  }, [nearby.data, id, latitude, longitude]);
+  }, [nearby.data, id, latitude, longitude, buildPopup]);
   return (
     <div>
       <div
@@ -107,7 +204,7 @@ export default function LocationMap({
         dir="ltr"
       />
       <p className="text-muted-foreground mt-2 text-sm">
-        {t("Blue: selected establishment. Orange: nearby establishments within 5 km.")}
+        {t("Blue: selected establishment. Orange: nearby establishments within 1 km.")}
       </p>
       {failed && (
         <p role="status" className="text-muted-foreground mt-2 text-sm">

@@ -2,12 +2,20 @@
 
 import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
+import { useTranslation } from "react-i18next";
 
+import { isRTL } from "@/config/languages";
 import { cn } from "@/lib/utils";
 
-function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Root>) {
+function Tabs({
+  className,
+  dir,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Root>) {
+  const { i18n } = useTranslation();
   return (
     <TabsPrimitive.Root
+      dir={dir ?? (isRTL(i18n.language) ? "rtl" : "ltr")}
       data-slot="tabs"
       className={cn("flex flex-col gap-2", className)}
       {...props}

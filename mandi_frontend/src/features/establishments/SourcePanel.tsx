@@ -11,6 +11,7 @@ import { Can } from "@/components/Can";
 import { AppDialog } from "@/components/public/AppDialog";
 import { AppErrorState } from "@/components/public/AppErrorState";
 import { AppLoader } from "@/components/public/AppLoader";
+import { SystemDateTime } from "@/components/public/SystemDateTime";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -104,9 +105,12 @@ export default function SourcePanel({
             <small className="muted">
               ID: {link.external_id}
               {link.is_primary ? " · Primary registry" : ""}
-              {link.last_synced_at
-                ? ` · Synced ${new Date(link.last_synced_at).toLocaleString()}`
-                : ""}
+              {link.last_synced_at ? (
+                <>
+                  {" · "}
+                  {t("Synced")} <SystemDateTime value={link.last_synced_at} includeTime />
+                </>
+              ) : null}
             </small>
             <Can permission="establishments.change_sourcelink">
               <Button

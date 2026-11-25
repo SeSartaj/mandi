@@ -137,6 +137,11 @@ class CollectionSubmissions(APIView):
             SubmissionFilters,
             {k: v for k, v in request.query_params.items() if v != ""},
         )
+        answer_filters = {
+            key[len("answer.") :]: value
+            for key, value in request.query_params.items()
+            if key.startswith("answer.") and value != ""
+        }
         qs = collection.submissions(
             request.user,
             pk or filters.get("checklist_id"),
@@ -145,8 +150,27 @@ class CollectionSubmissions(APIView):
             filters.get("search"),
             filters.get("date_from"),
             filters.get("date_to"),
+            answer_filters=answer_filters,
         )
         return paginated(request, qs, CollectionSubmissionSerializer)
+
+
+class ChecklistQuestions(APIView):
+    def get(self, request, pk):
+        return Response(collection.questions(request.user, pk))
+
+
+class EstablishmentSubmissionGroups(APIView):
+    def get(self, request, establishment_pk):
+        from apps.establishments.services import get_establishment
+
+        get_establishment(request.user, establishment_pk)
+        groups = collection.submission_groups(request.user, establishment_pk)
+        for group in groups:
+            group["submissions"] = CollectionSubmissionSerializer(
+                group["submissions"], many=True
+            ).data
+        return Response(groups)
 
 
 class CollectionSubmissionDetail(APIView):

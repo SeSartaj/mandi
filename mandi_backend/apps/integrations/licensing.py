@@ -114,6 +114,7 @@ def candidate(category, record):
     address = record.get("address") or {}
     province = address.get("province") or {}
     district = address.get("district") or {}
+    location_fields = _location(address, province)
     def location_name(value):
         return (value.get("name_fa") or value.get("name_en") or value.get("name_ps") or "") if isinstance(value, dict) else str(value)
     applicant = record.get("applicant") if isinstance(record.get("applicant"), dict) else {}
@@ -129,6 +130,10 @@ def candidate(category, record):
         "province": location_name(province),
         "district": location_name(district),
         "address": readable_address(address.get("address")),
+        "house_number": location_fields.get("House number") or "",
+        "floor": location_fields.get("Floor") or "",
+        "market": location_fields.get("Market") or "",
+        "neighborhood": location_fields.get("Neighborhood") or "",
         "license_number": record.get("aisa_license_number") or "",
         "license_issue_date": str(record.get("license_issue_date") or record.get("issue_date") or record.get("aisa_license_issue_date") or ""),
         "license_expiry_date": str(record.get("license_expiry_date") or record.get("expiry_date") or record.get("aisa_license_expire_date") or ""),

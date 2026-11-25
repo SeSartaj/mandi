@@ -375,6 +375,28 @@ def _is_internal(name):
     return name.startswith(SECTION_SCORE_PREFIXES)
 
 
+def matches_answer_filters(data, schema, filters):
+    """True when every requested answer column contains its needle.
+
+    Works on the flattened question names used by the table, so grouped and
+    repeated questions are matched by their bare XLSForm name. Both the raw
+    value and the display label (choice text) are searched.
+    """
+    if not filters:
+        return True
+    normalized = normalize(data)
+    for name, needle in filters.items():
+        value = normalized.get(name)
+        display = _display_value(name, value, schema)
+        choices = str(value) if not isinstance(value, (dict, list)) else " ".join(
+            str(item) for item in (value or [])
+        )
+        haystack = " ".join(part for part in (choices, display) if part)
+        if needle.casefold() not in haystack.casefold():
+            return False
+    return True
+
+
 def flatten_answers(value, prefix=""):
     result = {}
     for key, item in value.items():

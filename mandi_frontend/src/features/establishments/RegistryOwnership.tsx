@@ -28,63 +28,69 @@ export default function RegistryOwnership({ establishment }: { establishment: Es
       }),
   });
   return (
-    <div className="space-y-3 rounded border p-4">
-      <p>
-        Identity managed by:{" "}
-        <strong>
+    <div className="space-y-4">
+      <p className="text-sm">
+        {t("Identity managed by:")}{" "}
+        <strong dir="auto">
           {establishment.primary_source === "licensing"
             ? "Licensing"
             : establishment.primary_source || "Mandi"}
         </strong>
       </p>
       <Can permission="establishments.change_establishment">
-        {establishment.primary_source && (
-          <Button
-            disabled={mutation.isPending}
-            onClick={() => mutation.mutate({ action: "refresh" })}
-          >
-            Refresh registry identity
-          </Button>
-        )}
-        <Can permission="establishments.change_sourcelink">
-          {establishment.primary_source ? (
+        <div className="flex flex-wrap gap-2">
+          {establishment.primary_source && (
             <Button
-              variant="secondary"
               disabled={mutation.isPending}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Transfer identity ownership to Mandi? Local identity fields will become editable.",
-                  )
-                )
-                  mutation.mutate({ action: "ownership", source: null });
-              }}
+              onClick={() => mutation.mutate({ action: "refresh" })}
             >
-              Transfer ownership to Mandi
+              {t("Refresh registry identity")}
             </Button>
-          ) : (
-            establishment.source_links.map((link) => (
+          )}
+          <Can permission="establishments.change_sourcelink">
+            {establishment.primary_source ? (
               <Button
-                key={link.source}
                 variant="secondary"
                 disabled={mutation.isPending}
                 onClick={() => {
                   if (
                     window.confirm(
-                      `Make ${link.source} the primary registry? Its identity will replace local identity fields.`,
+                      t(
+                        "Transfer identity ownership to Mandi? Local identity fields will become editable.",
+                      ),
                     )
                   )
-                    mutation.mutate({ action: "ownership", source: link.source });
+                    mutation.mutate({ action: "ownership", source: null });
                 }}
               >
-                Use {link.source} as primary registry
+                {t("Transfer ownership to Mandi")}
               </Button>
-            ))
-          )}
-        </Can>
+            ) : (
+              establishment.source_links.map((link) => (
+                <Button
+                  key={link.source}
+                  variant="secondary"
+                  disabled={mutation.isPending}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        t(
+                          "Make {{source}} the primary registry? Its identity will replace local identity fields.",
+                          { source: link.source },
+                        ),
+                      )
+                    )
+                      mutation.mutate({ action: "ownership", source: link.source });
+                  }}
+                >
+                  {t("Use {{source}} as primary registry", { source: link.source })}
+                </Button>
+              ))
+            )}
+          </Can>
+        </div>
       </Can>
       {mutation.error && <p role="alert">{errorMessage(mutation.error)}</p>}
- 
     </div>
   );
 }

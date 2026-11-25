@@ -264,6 +264,12 @@ def openapi_document():
         params=["search", "establishment_id", "date_from", "date_to", "page_size"],
     )
     route(
+        "/checklists/{pk}/questions/",
+        "get",
+        "Ordered question metadata for building one column per question",
+        array({"type": "object"}),
+    )
+    route(
         "/checklists/{pk}/versions/",
         "get",
         "Published form versions of a checklist's deployed form",
@@ -383,6 +389,12 @@ def openapi_document():
         "get",
         "Provider-neutral establishment submissions",
         page({"type": "object"}),
+    )
+    route(
+        "/establishments/{pk}/collection-groups/",
+        "get",
+        "Establishment submissions grouped by checklist",
+        array({"type": "object"}),
     )
     route(
         "/collection-submissions/{pk}/",

@@ -1,6 +1,6 @@
 from apps.accounts import services as accounts
 from apps.establishments import services as establishments
-from apps.establishments.models import Establishment
+from apps.establishments.models import Establishment, SourceLink
 from apps.integrations import collection
 from apps.integrations import services as integrations
 from django.http import HttpResponse
@@ -88,7 +88,8 @@ class SourceSearch(APIView):
 class Choices(APIView):
     def get(self, request):
         class Input(serializers.Serializer):
-            kind = serializers.CharField(max_length=20)
+            kind = serializers.CharField(max_length=20, required=False, allow_blank=True)
+            checklist_id = serializers.IntegerField(min_value=1, required=False)
 
         return Response(
             integrations.establishment_choices(
@@ -318,7 +319,7 @@ class NearbyEstablishments(APIView):
             raise serializers.ValidationError("Invalid coordinates.")
         rows = []
         # Bound the database scan before calculating the exact great-circle distance.
-        latitude_delta = math.degrees(5 / 6371)
+        latitude_delta = math.degrees(1 / 6371)
         longitude_delta = min(180, latitude_delta / max(0.000001, math.cos(math.radians(center["latitude"]))))
         candidates = Establishment.objects.filter(
             latitude__gte=center["latitude"] - latitude_delta,
@@ -334,14 +335,33 @@ class NearbyEstablishments(APIView):
                 candidates = candidates.filter(Q(longitude__gte=west) | Q(longitude__lte=east - 360))
             else:
                 candidates = candidates.filter(longitude__gte=west, longitude__lte=east)
-        for obj in candidates.only("id", "name", "address", "latitude", "longitude").iterator(chunk_size=500):
+        candidate_ids = list(candidates.values_list("pk", flat=True))
+        licensing_by_id = dict(
+            SourceLink.objects.filter(
+                source="licensing", establishment_id__in=candidate_ids
+            ).values_list("establishment_id", "details")
+        )
+        for obj in candidates.select_related("province", "district").only("id", "name", "address", "latitude", "longitude", "province__name", "district__name").iterator(chunk_size=500):
             lat, lon = obj.latitude, obj.longitude
             if not math.isfinite(lat) or not math.isfinite(lon) or abs(lat) > 90 or abs(lon) > 180:
                 continue
             a = math.sin(math.radians(lat - center["latitude"]) / 2) ** 2 + math.cos(math.radians(lat)) * math.cos(math.radians(center["latitude"])) * math.sin(math.radians(lon - center["longitude"]) / 2) ** 2
             distance = 6371 * 2 * math.asin(math.sqrt(min(1, max(0, a))))
-            if distance <= 5:
-                rows.append({"id": str(obj.pk), "name": obj.name, "address": obj.address,
-                             "latitude": lat, "longitude": lon, "distance_km": round(distance, 3)})
+            if distance <= 1:
+                licensing = licensing_by_id.get(obj.pk) or {}
+                rows.append({
+                    "id": str(obj.pk),
+                    "name": obj.name,
+                    "address": obj.address,
+                    "province": obj.province.name if obj.province else licensing.get("province", ""),
+                    "district": obj.district.name if obj.district else licensing.get("district", ""),
+                    "house_number": licensing.get("house_number", ""),
+                    "floor": licensing.get("floor", ""),
+                    "market": licensing.get("market", ""),
+                    "pharmacy_type": licensing.get("pharmacy_type", ""),
+                    "latitude": lat,
+                    "longitude": lon,
+                    "distance_km": round(distance, 3),
+                })
         rows.sort(key=lambda row: (row["distance_km"], row["id"]))
-        return Response({"results": rows[:100], "count": len(rows), "radius_km": 5})
+        return Response({"results": rows[:100], "count": len(rows), "radius_km": 1})

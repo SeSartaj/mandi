@@ -4,6 +4,7 @@ import {
   useEstablishmentKinds,
   useLocationName,
   useLocations,
+  useDistrictName,
 } from "@/features/establishments/registry";
 import { CreateButton } from "@/components/public/ActionButton";
 import { useMemo, useState } from "react";
@@ -35,6 +36,7 @@ export default function EstablishmentsPage() {
   const { t } = useTranslation();
   const establishmentKinds = useEstablishmentKinds();
   const locationName = useLocationName();
+  const districtName = useDistrictName();
   const { provinces, districts } = useLocations();
   const { params, update, page, setPage } = useListParams();
   const search = params.get("search") ?? "";
@@ -179,7 +181,7 @@ export default function EstablishmentsPage() {
                     { value: "__all__", label: t("All districts") },
                     ...districtOptions.map((item) => ({
                       value: String(item.id),
-                      label: locationName(item.name, item.name_local),
+                      label: districtName(item.name, item.name_local),
                     })),
                   ]}
                 />
@@ -231,7 +233,7 @@ export default function EstablishmentsPage() {
                       ) || "—"}
                     </TableCell>
                     <TableCell>
-                      {locationName(
+                      {districtName(
                         establishment.district_name,
                         establishment.district_name_local,
                       ) || "—"}

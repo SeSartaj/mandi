@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { PageSection } from "@/components/PageSection";
 import { AppErrorState } from "@/components/public/AppErrorState";
 import { AppLoader } from "@/components/public/AppLoader";
+import { SystemDateTime } from "@/components/public/SystemDateTime";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -232,7 +233,11 @@ export default function ExternalSystemsPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {syncedAt ? new Date(syncedAt).toLocaleString() : t("Never")}
+                        {syncedAt ? (
+                          <SystemDateTime value={syncedAt} includeTime />
+                        ) : (
+                          t("Never")
+                        )}
                       </TableCell>
                       <TableCell className="text-end">
                         <div className="flex flex-wrap justify-end gap-2">

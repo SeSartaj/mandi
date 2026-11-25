@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { SystemDateTime } from "@/components/public/SystemDateTime";
 import { useApiQuery } from "@/features/shared/api";
 import { errorMessage } from "@/lib/api";
 
@@ -40,11 +41,14 @@ export default function RegistrySyncStatus() {
           </strong>
           :{" "}
           {state.last_error ||
-            (state.last_success_at
-              ? t("Last page synced {{date}}", {
-                  date: new Date(state.last_success_at).toLocaleString(),
-                })
-              : t("Waiting"))}
+            (state.last_success_at ? (
+              <>
+                {t("Last page synced")}{" "}
+                <SystemDateTime value={state.last_success_at} includeTime />
+              </>
+            ) : (
+              t("Waiting")
+            ))}
           <span className="text-muted-foreground block">
             {t("Next page {{page}}", { page: state.next_page })} ·{" "}
             {Object.entries(state.counts)

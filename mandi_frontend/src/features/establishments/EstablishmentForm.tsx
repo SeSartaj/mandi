@@ -1,4 +1,9 @@
-import { useEstablishmentKinds, useLocationName, useLocations } from "@/features/establishments/registry";
+import {
+  useEstablishmentKinds,
+  useLocationName,
+  useLocations,
+  useDistrictName,
+} from "@/features/establishments/registry";
 import { FieldSupport } from "@/components/ui/field-support";
 import { CancelButton, SaveButton } from "@/components/public/ActionButton";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -38,6 +43,7 @@ export default function EstablishmentForm({
   });
   const locations = useLocations();
   const locationName = useLocationName();
+  const districtName = useDistrictName();
   const selectedProvince = form.watch("province");
   const districtOptions = locations.districts.filter(
     (district) => String(district.province_id) === String(selectedProvince),
@@ -108,7 +114,7 @@ export default function EstablishmentForm({
           label={t("District")}
           items={districtOptions.map((district) => ({
             value: String(district.id),
-            label: locationName(district.name, district.name_local),
+            label: districtName(district.name, district.name_local),
           }))}
         />
       </div>

@@ -324,6 +324,17 @@ small {
   font-size: 15px;
   overflow-wrap: anywhere;
 }
+/* Map popups use their own label/value rows and must sit above every pin. */
+.establishment-map-popup {
+  z-index: 20 !important;
+}
+.establishment-map-popup .maplibregl-popup-content {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #0f172a;
+}
 /* The establishment profile is read and printed as one document. */
 .establishment-profile .info-grid dt {
   font-size: 13px;

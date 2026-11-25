@@ -30,15 +30,22 @@ def source_record(actor, source, external_id, kind):
     raise NotFound("External record not found.")
 
 
-def establishment_choices(actor, kind):
+def establishment_choices(actor, kind=None, checklist_id=None):
+    from apps.accounts.services import require_checklist_access
     from apps.establishments.services import list_establishments
 
+    qs = list_establishments(actor, {"kind": kind} if kind else {})
+    if checklist_id:
+        require_checklist_access(actor, checklist_id)
+        qs = qs.filter(
+            collection_submissions__deployment__checklist_id=checklist_id
+        ).distinct()
     return [
         {
             "name": str(e.pk),
             "label": f"{e.name} · {e.province.name if e.province else ''} · {str(e.pk)[:8]}",
         }
-        for e in list_establishments(actor, {"kind": kind})
+        for e in qs
     ]
 
 
@@ -71,8 +78,48 @@ def source_detail(actor, establishment_id, source, include_sensitive=None):
         detail = adapter.details(establishment.kind_id, link.external_id, **options)
         # Store only business coordinates, never the full source profile.
         if link.is_primary:
-            location = next((section["location"] for section in detail.get("sections", []) if section.get("location")), None)
+            sections = detail.get("sections", [])
+            location = next((section["location"] for section in sections if section.get("location")), None)
             details = {key: value for key, value in link.details.items() if key != "location"}
+
+            def plain(value):
+                if isinstance(value, dict):
+                    return value.get("name_fa") or value.get("name_en") or value.get("name_ps") or ""
+                return str(value or "")
+
+            location_section = next(
+                (section for section in sections if section.get("title") == "Location"), None
+            )
+            fields = {
+                str(field.get("label")): field.get("value")
+                for field in (location_section or {}).get("fields", [])
+            }
+            for key, label in (
+                ("province", "Province"),
+                ("district", "District"),
+                ("address", "Address"),
+                ("house_number", "House number"),
+                ("floor", "Floor"),
+                ("market", "Market"),
+                ("neighborhood", "Neighborhood"),
+            ):
+                value = fields.get(label)
+                if value not in (None, "", {}, []):
+                    details[key] = plain(value)
+            establishment_section = next(
+                (section for section in sections if section.get("title") == "Establishment"),
+                None,
+            )
+            pharmacy_type = next(
+                (
+                    field.get("value")
+                    for field in (establishment_section or {}).get("fields", [])
+                    if field.get("label") == "Pharmacy type"
+                ),
+                None,
+            )
+            if pharmacy_type not in (None, "", {}, []):
+                details["pharmacy_type"] = plain(pharmacy_type)
             if location:
                 details["location"] = location
             SourceLink.objects.filter(pk=link.pk).update(details=details)

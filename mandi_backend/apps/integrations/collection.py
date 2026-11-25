@@ -20,6 +20,7 @@ from .entities import ensure_dataset, establishment_for_entity, sync_entities
 from .models import CollectionSubmission, CollectorGrant, FormDeployment
 from .providers import CollectionError, provider
 from .submissions import form_schema
+from .submissions import group_name, matches_answer_filters, _is_internal
 from .xlsform import (
     XlsFormError,
     add_establishment_question,
@@ -168,6 +169,7 @@ def submissions(
     search=None,
     date_from=None,
     date_to=None,
+    answer_filters=None,
 ):
     require(actor, "establishments.view_establishment")
     qs = CollectionSubmission.objects.select_related(
@@ -190,7 +192,81 @@ def submissions(
         qs = qs.filter(submitted_at__date__gte=date_from)
     if date_to:
         qs = qs.filter(submitted_at__date__lte=date_to)
+    if answer_filters:
+        matching = [
+            obj.pk
+            for obj in qs
+            if matches_answer_filters(
+                obj.data, obj.deployment.schema, answer_filters
+            )
+        ]
+        qs = qs.filter(pk__in=matching)
     return qs
+
+
+def questions(actor, checklist_id):
+    """Question metadata used to build one column per question in the UI."""
+    require(actor, "inspections.view_checklist")
+    require_checklist_access(actor, checklist_id)
+    deployment = (
+        FormDeployment.objects.filter(
+            checklist_id=checklist_id, provider=settings.COLLECTION_PROVIDER
+        )
+        .exclude(schema={})
+        .first()
+    )
+    schema = (deployment.schema if deployment else {}) or {}
+    labels = schema.get("labels") or {}
+    types = schema.get("types") or {}
+    groups = schema.get("groups") or {}
+    paths = schema.get("paths") or {}
+    order = schema.get("order") or list(labels)
+    result = []
+    for name in order:
+        if not name or name not in labels:
+            continue
+        if _is_internal(name):
+            continue
+        path = paths.get(name, "")
+        group = group_name(path)
+        result.append(
+            {
+                "name": name,
+                "label": labels.get(name) or name,
+                "type": types.get(name, ""),
+                "group": groups.get(group, ""),
+                "choices": [
+                    {"value": str(value), "label": label}
+                    for value, label in (schema.get("choices", {}).get(name) or {}).items()
+                ],
+            }
+        )
+    return result
+
+
+def submission_groups(actor, establishment_id, per_group=5):
+    """Submissions for an establishment, grouped by checklist for detail tabs."""
+    require(actor, "establishments.view_establishment")
+    qs = submissions(actor, establishment_id=establishment_id)
+    groups = (
+        qs.values("deployment__checklist_id", "deployment__checklist__name")
+        .annotate(count=Count("pk"), last_submitted_at=Max("submitted_at"))
+        .order_by("deployment__checklist__name")
+    )
+    payload = []
+    for group in groups:
+        checklist_id = group["deployment__checklist_id"]
+        recent = qs.filter(deployment__checklist_id=checklist_id)[:per_group]
+        payload.append(
+            {
+                "checklist_id": checklist_id,
+                "checklist_name": group["deployment__checklist__name"],
+                "count": group["count"],
+                "last_submitted_at": group["last_submitted_at"],
+                "submissions": recent,
+            }
+        )
+    return payload
 
 
 def statistics(actor, establishment_id):
