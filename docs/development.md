@@ -191,6 +191,13 @@ integration operators receive.
   Set `mandi_establishment=none` in the XLSForm settings to skip the
   establishment block for forms that do not belong to an establishment;
   `mandi_establishment=optional` makes the question optional.
+- All establishments are stored in **one** project-scoped Entity List named
+  `establishments`. Forms narrow the selector with `choice_filter` on Entity
+  properties such as `kind`, `province`, `district`, `grade`, or
+  `pharmacy_type`. When Mandi adds the selector it applies, in order: the form's
+  own `choice_filter`; the `mandi_establishment_filter` setting; or
+  `kind = ${establishment_type}` when the form has an `establishment_type`
+  question. Example settings value: `kind = 'pharmacy' and province = 'Kabul'`.
 - The source is the project-scoped ODK Entity List `establishments`
   (`ODK_ENTITY_LIST`). Deployment creates the list/properties when needed,
   reconciles it with Mandi establishments, and links it to the form draft
@@ -207,6 +214,10 @@ integration operators receive.
 - The detail rows are wrapped in one `field-list` group and read properties from
   the Entity List. Forms still use `select_one_from_file establishments.csv`, so
   no form version is needed when establishment data changes.
+- During deployment Mandi hides visible score/result notes from collectors by
+  setting their relevance to `false()`. The `score_*`, `max_*`, `pct_*` and
+  `result_pct` calculations remain in the submission, so managers still see the
+  results in Mandi while employees do not see them at the end of the form.
 - Adding the detail rows changes the form structure, so an already-published
   form must normally be published under a new checklist code/version rather than
   redeployed in place; Central's structure warning is reported with a hint. The
@@ -246,12 +257,13 @@ Section scores are read from `score_*`, `max_*`, and `pct_*` fields when present
 
 Source links currently allow one external record per source per establishment, and prevent the same source record from being connected to two Mandi establishments. Review this assumption if source systems represent branches or duplicates differently.
 
-## Licensing registry import
+## Registry import
 
 Licensing is configured with `LICENSING_BASE_URL` and
 `LICENSING_REGISTRATION_API_KEY`. The `licensing` external system is active and
 searchable by default; the catalog reports it as connected when both values are
-set.
+set. Survey is configured separately with `SURVEY_BASE_URL` and
+`SURVEY_REGISTRATION_API_KEY`; it imports pharmacies and wholesalers only.
 
 To import every active Licensing category (`company`, `factory`, `pharmacy`,
 `wholesale`) once and link each record as the establishment's primary identity:
@@ -371,3 +383,29 @@ a plain array response. No upstream pagination URLs are followed directly.
 Verified on 2026-11-21 against production: company 429, factory 73, pharmacy 955,
 wholesale 0. List, identity, and detail lookups succeeded for all populated
 categories.
+
+### Live Survey connection
+
+The supplied API contract is saved in [survey-api-reference.md](survey-api-reference.md).
+Set `SURVEY_BASE_URL` (Survey backend origin, without `/api`),
+`SURVEY_REGISTRATION_API_KEY` (the same value as Survey's
+`REGISTRATION_INTEGRATION_API_KEY`), and optionally `SURVEY_TIMEOUT` in
+`mandi_backend/.env` and the root `.env`. Tune polling with
+`SURVEY_SYNC_ENABLED`, `SURVEY_SYNC_INTERVAL` (default 300s) and
+`SURVEY_SYNC_PAGE_SIZE`. Restart the backend and `registry-worker` after changing
+these values; secrets remain in ignored server environment files.
+
+```bash
+.venv/bin/python mandi_backend/manage.py sync_registries --full --source survey
+```
+
+Survey imports only `pharmacy` and `wholesale` registrations. Its numeric
+`application_id` is the source identity, matching the `survey_id` reference that
+Licensing already exposes. Records already linked from Licensing remain
+secondary mappings; records unique to Survey become new primary establishments.
+Survey's list has no `next` link, so Mandi computes the page boundary from
+`count`. Its integration list also supports province/district/status/grade and
+other registration filters, and the detail endpoint returns the full
+registration record. Mandi renders that full profile and uses Survey grade,
+pharmacy type, owner and contact data in the shared Entity List when Licensing
+does not manage the establishment.

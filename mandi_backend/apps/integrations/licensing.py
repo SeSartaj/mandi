@@ -271,6 +271,42 @@ def _document_url(value):
     return value.get("file") if isinstance(value, dict) else value if isinstance(value, str) else None
 
 
+def _attachment_value(value):
+    if isinstance(value, dict):
+        return value.get("file") or value.get("url")
+    if isinstance(value, list):
+        urls = []
+        for item in value:
+            url = _attachment_value(item)
+            if url:
+                urls.append(url)
+        return urls or None
+    return value if isinstance(value, str) and value.strip() else None
+
+
+_ATTACHMENT_FIELDS = (
+    ("License document", "license_attachment"),
+    ("AISA license document", "aisa_license_attachment"),
+    ("Request letter", "request_letter_attachment"),
+    ("Ibn Sina procurement", "ibn_sina_procurement_attachment"),
+    ("Stamp", "stamp_attachment"),
+    ("Land ownership", "land_ownership_attachment"),
+    ("Sharia lawyer document", "sharia_lawyer_document"),
+    ("Finance response", "finance_response_attachment"),
+    ("Azade press response", "azade_press_response_attachment"),
+    ("Extra attachments", "extra_attachments"),
+)
+
+
+def _attachments_section(record):
+    data = {}
+    for label, key in _ATTACHMENT_FIELDS:
+        value = _attachment_value(record.get(key))
+        if value:
+            data[label] = value
+    return _section("Attachments", data) if data else None
+
+
 def application_details(category, record, include_sensitive=False):
     """A concise inspection profile, not an explorer for the upstream schema."""
     location = record.get("address") or {}
@@ -300,6 +336,7 @@ def application_details(category, record, include_sensitive=False):
             "Old license number": record.get("old_license_number"),
             "Old license issue date": record.get("old_license_issue_date"),
             "Environmental permit number": record.get("environmental_permit_license_number")}),
+        _attachments_section(record),
         _section("Activities and premises", {"Activities": _named_items(record.get("activity_domain")),
             "Production lines": _named_items(record.get("production_lines")),
             "Branches": _named_items(record.get("company_branches") or record.get("factory_branches")),
@@ -308,7 +345,7 @@ def application_details(category, record, include_sensitive=False):
     ]
     return {"name": record.get("name") or record.get("name_en") or str(record["application_id"]),
             "application_id": record["application_id"], "category": category,
-            "sections": [section for section in sections if section["fields"] or section.get("location")]}
+            "sections": [section for section in sections if section and (section["fields"] or section.get("location"))]}
 
 
 def related_details(record, source, external_id, include_sensitive=False):

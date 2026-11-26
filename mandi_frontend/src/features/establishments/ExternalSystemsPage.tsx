@@ -207,7 +207,7 @@ export default function ExternalSystemsPage() {
                         <Badge variant={system.configured ? "default" : "secondary"}>
                           {system.configured ? t("Configured") : t("Not configured")}
                         </Badge>
-                        {!system.syncable && (
+                        {!system.syncable && system.code === "archive" && (
                           <span className="text-muted-foreground mt-1 block text-xs">
                             {t("Derived from Licensing")}
                           </span>

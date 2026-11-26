@@ -20,13 +20,28 @@ export default function RegistryImport() {
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [province, setProvince] = useState("");
+  const [status, setStatus] = useState("");
+  const [grade, setGrade] = useState("");
   const catalog = useRegistryCatalog();
   const client = useQueryClient();
   const navigate = useNavigate();
+  const selectedSystem = catalog.data?.systems.find((item) => item.code === source);
+  const types = catalog.data?.types.filter(
+    (item) => !selectedSystem?.kinds?.length || selectedSystem.kinds.includes(item.code),
+  );
+  const sourceFilters =
+    source === "survey"
+      ? {
+          ...(province ? { province } : {}),
+          ...(status ? { status } : {}),
+          ...(grade ? { grade } : {}),
+        }
+      : {};
   const candidates = useApiQuery<{ results: Candidate[]; has_next: boolean }>(
     ["registry-import", source],
     `/sources/${source}/`,
-    { kind, search: query, page },
+    { kind, search: query, page, ...sourceFilters },
     { enabled: open },
   );
   const mutation = useMutation({
@@ -63,7 +78,15 @@ export default function RegistryImport() {
               className="block w-full rounded border p-2"
               value={source}
               onChange={(e) => {
-                setSource(e.target.value);
+                const next = e.target.value;
+                setSource(next);
+                const nextSystem = catalog.data?.systems.find((item) => item.code === next);
+                const allowed = catalog.data?.types.filter(
+                  (item) => !nextSystem?.kinds?.length || nextSystem.kinds.includes(item.code),
+                );
+                if (allowed?.length && !allowed.some((item) => item.code === kind)) {
+                  setKind(allowed[0].code);
+                }
                 setPage(1);
                 mutation.reset();
               }}
@@ -88,13 +111,68 @@ export default function RegistryImport() {
                 mutation.reset();
               }}
             >
-              {catalog.data?.types.map((item) => (
+              {types?.map((item) => (
                 <option key={item.code} value={item.code}>
                   {item.name}
                 </option>
               ))}
             </select>
           </label>
+          {source === "survey" && (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="block">
+                {t("Province")}
+                <select
+                  className="block w-full rounded border p-2"
+                  value={province}
+                  onChange={(e) => {
+                    setProvince(e.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">{t("All")}</option>
+                  {catalog.data?.provinces.map((item) => (
+                    <option key={item.id} value={item.name}>
+                      {item.name_local || item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                {t("Status")}
+                <select
+                  className="block w-full rounded border p-2"
+                  value={status}
+                  onChange={(e) => {
+                    setStatus(e.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">{t("All")}</option>
+                  <option value="ongoing">{t("Ongoing")}</option>
+                  <option value="completed">{t("Completed")}</option>
+                  <option value="rejected">{t("Rejected")}</option>
+                </select>
+              </label>
+              <label className="block">
+                {t("Grade")}
+                <select
+                  className="block w-full rounded border p-2"
+                  value={grade}
+                  onChange={(e) => {
+                    setGrade(e.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">{t("All")}</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="none">{t("None")}</option>
+                </select>
+              </label>
+            </div>
+          )}
           <form
             className="flex gap-2"
             onSubmit={(e) => {

@@ -33,6 +33,26 @@ def build_settings_qr(server_url, project_name="Mandi"):
     return "data:image/png;base64," + b64encode(buffer.getvalue()).decode()
 
 
+def _establishment_answer(data):
+    """Return the establishment Entity UUID from a Central submission.
+
+    The question is normally top level, but forms may place it inside a group
+    (``visit/establishment_id`` or a nested ``visit`` object); every shape must
+    resolve, otherwise the submission is stored without an establishment link.
+    """
+    for key, item in data.items():
+        if not item:
+            continue
+        if isinstance(item, dict):
+            nested = _establishment_answer(item)
+            if nested:
+                return nested
+            continue
+        if str(key).rsplit("/", 1)[-1] == "establishment_id":
+            return str(item)
+    return ""
+
+
 def request(method, path, **kwargs):
     if not settings.ODK_EMAIL or not settings.ODK_PASSWORD:
         raise CollectionError(
@@ -232,7 +252,7 @@ class OdkProvider:
         timestamp = metadata.get("submissionDate") or ""
         return RemoteSubmission(
             submission_id=data.get("__id") or "",
-            establishment_id=data.get("establishment_id") or "",
+            establishment_id=_establishment_answer(data),
             submitted_at=parse_datetime(timestamp),
             form_version=str(metadata.get("formVersion") or ""),
             data=data,

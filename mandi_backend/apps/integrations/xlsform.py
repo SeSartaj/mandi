@@ -1,4 +1,5 @@
 import io
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -78,7 +79,7 @@ def _as_xlsx(filename, content):
         return converted.read_bytes(), f"{Path(filename).stem}.xlsx"
 
 
-def _form_setting(workbook, key):
+def _form_setting(workbook, key, lower=True):
     if "settings" not in workbook.sheetnames:
         return ""
     sheet = workbook["settings"]
@@ -110,7 +111,8 @@ def _form_setting(workbook, key):
         ),
         None,
     )
-    return str(sheet.cell(value_row, column).value or "").strip().lower() if value_row else ""
+    value = str(sheet.cell(value_row, column).value or "").strip() if value_row else ""
+    return value.lower() if lower else value
 
 
 def _ensure_column(survey, header_row, columns, name):
@@ -161,6 +163,14 @@ def add_establishment_question(filename, content):
     dari = any(token in label_header.lower() for token in _DARI_LABEL_TOKENS)
 
     name_column = columns["name"]
+    has_type_question = any(
+        str(survey.cell(row=row, column=name_column).value or "").strip()
+        == "establishment_type"
+        for row in range(header_row + 1, survey.max_row + 1)
+    )
+    filter_value = _form_setting(workbook, "mandi_establishment_filter", lower=False)
+    if not filter_value and has_type_question:
+        filter_value = "kind = ${establishment_type}"
     establishment_row = None
     details_present = False
     for row in range(header_row + 1, survey.max_row + 1):
@@ -174,6 +184,7 @@ def add_establishment_question(filename, content):
     required = _ensure_column(survey, header_row, columns, "required")
     calculation = _ensure_column(survey, header_row, columns, "calculation")
     relevant = _ensure_column(survey, header_row, columns, "relevant")
+    choice_filter = _ensure_column(survey, header_row, columns, "choice_filter")
 
     if establishment_row is None:
         survey.insert_rows(header_row + 1)
@@ -185,6 +196,7 @@ def add_establishment_question(filename, content):
             "label": _establishment_label(label_header),
             "appearance": "search",
             "required": "" if establishment_mode == "optional" else "yes",
+            "choice_filter": filter_value,
         }
         for key, value in values.items():
             column = label_column if key == "label" else columns.get(key)
@@ -192,6 +204,10 @@ def add_establishment_question(filename, content):
                 survey.cell(row=establishment_row, column=column, value=value)
     else:
         added_establishment = False
+        if filter_value:
+            current = survey.cell(row=establishment_row, column=choice_filter).value
+            if current is None or not str(current).strip():
+                survey.cell(row=establishment_row, column=choice_filter, value=filter_value)
 
     if details_present:
         if not added_establishment:
@@ -236,6 +252,90 @@ def add_establishment_question(filename, content):
     output = io.BytesIO()
     workbook.save(output)
     return output.getvalue(), xlsx_name
+
+
+_RESULT_REFERENCE = re.compile(
+    r"\$\{(?:result_pct|score_total|max_total|pct_[A-Za-z0-9_]+|score_[A-Za-z0-9_]+)\}"
+)
+_RESULT_PHRASES = (
+    "Total score",
+    "Final score",
+    "Overall percentage",
+    "امتیاز مجموعی",
+    "نمره نهایی",
+    "فیصدی مجموعی",
+    "ټوله فیصدي",
+)
+
+
+def hide_result_notes(content):
+    """Hide score/result notes from collectors while keeping calculations intact.
+
+    The calculations remain in the form so managers still receive ``result_pct``
+    and section scores, but any visible note that interpolates those values is
+    marked ``relevant=false()``.
+    """
+    workbook = load_workbook(io.BytesIO(content))
+    if "survey" not in workbook.sheetnames:
+        workbook.close()
+        return content
+    survey = workbook["survey"]
+    header_row = None
+    columns = {}
+    for row in range(1, min(survey.max_row, 10) + 1):
+        values = {
+            str(survey.cell(row=row, column=column).value).strip().lower(): column
+            for column in range(1, survey.max_column + 1)
+            if survey.cell(row=row, column=column).value
+        }
+        if "type" in values and "name" in values:
+            header_row = row
+            columns = values
+            break
+    if header_row is None:
+        workbook.close()
+        return content
+
+    label_columns = [
+        column for name, column in columns.items() if name.startswith("label")
+    ]
+    if not label_columns:
+        workbook.close()
+        return content
+
+    relevant_column = columns.get("relevant")
+    if relevant_column is None:
+        relevant_column = survey.max_column + 1
+        survey.cell(header_row, relevant_column, "relevant")
+
+    changed = False
+    for row in range(header_row + 1, survey.max_row + 1):
+        node_type = str(survey.cell(row, columns["type"]).value or "").strip().lower()
+        if node_type in {
+            "",
+            "begin_group",
+            "end_group",
+            "begin_repeat",
+            "end_repeat",
+            "calculate",
+        }:
+            continue
+        label = " ".join(
+            str(survey.cell(row, column).value or "") for column in label_columns
+        )
+        if _RESULT_REFERENCE.search(label) or any(
+            phrase in label for phrase in _RESULT_PHRASES
+        ):
+            survey.cell(row, relevant_column, "false()")
+            changed = True
+
+    if not changed:
+        workbook.close()
+        return content
+    output = io.BytesIO()
+    workbook.save(output)
+    workbook.close()
+    return output.getvalue()
 
 
 def read_checklist_metadata(filename, content):

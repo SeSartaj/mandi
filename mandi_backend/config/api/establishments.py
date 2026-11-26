@@ -2,9 +2,11 @@ from apps.accounts import services as accounts
 from apps.establishments import services as establishments
 from apps.establishments.models import Establishment, SourceLink
 from apps.integrations import collection
+from apps.integrations import documents
 from apps.integrations import services as integrations
 from django.http import HttpResponse
 from rest_framework import serializers
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -78,11 +80,50 @@ class SourceSearch(APIView):
             search = serializers.CharField(required=False, allow_blank=True, default="")
             page = serializers.IntegerField(min_value=1, default=1)
             page_size = serializers.IntegerField(min_value=1, max_value=100, default=20)
+            province = serializers.CharField(required=False, allow_blank=True)
+            district = serializers.CharField(required=False, allow_blank=True)
+            status = serializers.CharField(required=False, allow_blank=True)
+            application_status = serializers.CharField(required=False, allow_blank=True)
+            grade = serializers.CharField(required=False, allow_blank=True)
+            grade_type = serializers.CharField(required=False, allow_blank=True)
 
         values = validated(Input, request.query_params)
+        filters = {
+            key: values.pop(key)
+            for key in ("province", "district", "status", "application_status", "grade", "grade_type")
+            if values.get(key)
+        }
+        if filters.get("status") and not filters.get("application_status"):
+            filters["application_status"] = filters.pop("status")
         return Response(
-            integrations.source_search(request.user, source, **values)
+            integrations.source_search(
+                request.user, source, filters=filters or None, **values
+            )
         )
+
+
+class SourceDocument(APIView):
+    """Stream a document held by a source system, with its API key attached.
+
+    Signed links are used by the UI so a new browser tab can open the file without
+    holding the integration key; an authenticated request may also pass ``url``.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, source):
+        class Input(serializers.Serializer):
+            token = serializers.CharField(required=False, allow_blank=True)
+            url = serializers.CharField(required=False, allow_blank=True, max_length=2000)
+
+        values = validated(Input, request.query_params)
+        if values.get("token"):
+            token_source, url = documents.from_token(values["token"])
+            return documents.response(token_source, url)
+        documents.require_viewer(request.user)
+        if not values.get("url"):
+            raise serializers.ValidationError({"url": "A document URL is required."})
+        return documents.response(source, values["url"])
 
 
 class Choices(APIView):
@@ -136,12 +177,17 @@ class RegistryCatalog(APIView):
     def get(self, request):
         accounts.require(request.user, "establishments.view_establishment")
         from apps.establishments.models import EstablishmentType, ExternalSystem
-        from apps.integrations import licensing
+        from apps.integrations import licensing, survey
         from apps.integrations.registry import ADAPTERS
         systems = list(ExternalSystem.objects.filter(is_active=True).values("code", "name", "adapter"))
         for system in systems:
+            adapter = ADAPTERS.get(system["adapter"])
+            kinds = getattr(adapter, "kinds", None) if adapter is not None else None
+            system["kinds"] = sorted(kinds) if isinstance(kinds, dict) else []
             if system["adapter"] == "licensing":
                 system["searchable"] = licensing.configured()
+            elif system["adapter"] == "survey":
+                system["searchable"] = survey.configured()
             else:
                 system["searchable"] = system["adapter"] in ADAPTERS
         systems.sort(key=lambda item: (item["code"] != "licensing", item["name"]))
@@ -159,8 +205,13 @@ class RegistrySyncStatus(APIView):
         accounts.require(request.user, "establishments.view_establishment")
         from django.conf import settings
         from apps.establishments.models import RegistrySyncCursor
-        return Response({"enabled": settings.LICENSING_SYNC_ENABLED,
-            "interval": settings.LICENSING_SYNC_INTERVAL,
+        intervals = []
+        if settings.LICENSING_SYNC_ENABLED:
+            intervals.append(settings.LICENSING_SYNC_INTERVAL)
+        if settings.SURVEY_SYNC_ENABLED:
+            intervals.append(settings.SURVEY_SYNC_INTERVAL)
+        return Response({"enabled": bool(intervals),
+            "interval": min(intervals or [settings.LICENSING_SYNC_INTERVAL]),
             "states": list(RegistrySyncCursor.objects.values("source_id", "kind_id", "next_page", "last_attempt_at", "last_success_at", "last_error", "counts"))})
 
 
@@ -193,7 +244,7 @@ class RegistrySystems(APIView):
     def get(self, request):
         from django.conf import settings
         from apps.establishments.models import ExternalSystem, RegistrySyncCursor, RegistrySyncRequest
-        from apps.integrations import licensing
+        from apps.integrations import licensing, survey
         from apps.integrations.registry import ADAPTERS
 
         accounts.require(request.user, "establishments.view_establishment")
@@ -206,11 +257,12 @@ class RegistrySystems(APIView):
             adapter = ADAPTERS.get(system.adapter)
             if system.adapter == "licensing":
                 configured = licensing.configured()
+            elif system.adapter == "survey":
+                configured = survey.configured() and adapter is not None
             else:
-                # Archive/survey profiles are delivered through Licensing, so
-                # they count as available when that connection is configured.
+                # Archive profiles are still delivered through Licensing.
                 configured = adapter is not None or (
-                    system.adapter in {"archive", "survey"} and licensing.configured()
+                    system.adapter == "archive" and licensing.configured()
                 )
             syncable = bool(configured and adapter is not None and hasattr(adapter, "list_page"))
             states = list(
@@ -233,9 +285,14 @@ class RegistrySystems(APIView):
                 "states": states,
                 "full_sync": latest_full_sync(system),
             })
+        intervals = []
+        if settings.LICENSING_SYNC_ENABLED:
+            intervals.append(settings.LICENSING_SYNC_INTERVAL)
+        if settings.SURVEY_SYNC_ENABLED:
+            intervals.append(settings.SURVEY_SYNC_INTERVAL)
         return Response({
-            "enabled": settings.LICENSING_SYNC_ENABLED,
-            "interval": settings.LICENSING_SYNC_INTERVAL,
+            "enabled": bool(intervals),
+            "interval": min(intervals or [settings.LICENSING_SYNC_INTERVAL]),
             "systems": systems,
         })
 
@@ -245,7 +302,7 @@ class RegistrySystemSync(APIView):
     def post(self, request, code):
         from django.conf import settings
         from apps.establishments.models import ExternalSystem
-        from apps.integrations import licensing
+        from apps.integrations import licensing, survey
         from apps.integrations.registry import adapter_for
         from apps.integrations.registry_sync import sync_batch
 
@@ -254,6 +311,8 @@ class RegistrySystemSync(APIView):
             raise serializers.ValidationError({"source": "Unknown or inactive external system."})
         if system.adapter == "licensing" and not licensing.configured():
             raise serializers.ValidationError({"source": "The Licensing connection is not configured."})
+        if system.adapter == "survey" and not survey.configured():
+            raise serializers.ValidationError({"source": "The Survey connection is not configured."})
         adapter = adapter_for(code)
         if adapter is None or not hasattr(adapter, "list_page"):
             raise serializers.ValidationError({"source": "This external system does not support direct sync."})
@@ -271,7 +330,7 @@ class RegistrySystemFullSync(APIView):
     def post(self, request, code):
         from django.db import IntegrityError, transaction
         from apps.establishments.models import ExternalSystem, RegistrySyncRequest
-        from apps.integrations import licensing
+        from apps.integrations import licensing, survey
         from apps.integrations.registry import adapter_for
 
         system = ExternalSystem.objects.filter(pk=code, is_active=True).first()
@@ -279,6 +338,8 @@ class RegistrySystemFullSync(APIView):
             raise serializers.ValidationError({"source": "Unknown or inactive external system."})
         if system.adapter == "licensing" and not licensing.configured():
             raise serializers.ValidationError({"source": "The Licensing connection is not configured."})
+        if system.adapter == "survey" and not survey.configured():
+            raise serializers.ValidationError({"source": "The Survey connection is not configured."})
         adapter = adapter_for(code)
         if adapter is None or not hasattr(adapter, "list_page"):
             raise serializers.ValidationError({"source": "This external system does not support direct sync."})

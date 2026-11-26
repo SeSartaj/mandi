@@ -82,12 +82,16 @@ def ensure_dataset(project_id=None, name=None):
     return name
 
 
-def _licensing_details(establishment):
-    link = next(
-        (item for item in establishment.source_links.all() if item.source == "licensing"),
-        None,
-    )
-    return link.details if link and isinstance(link.details, dict) else {}
+def _source_details(establishment):
+    """Licensing stays authoritative when it is linked; Survey supplies the rest."""
+    for source in ("licensing", "survey"):
+        link = next(
+            (item for item in establishment.source_links.all() if item.source == source),
+            None,
+        )
+        if link and isinstance(link.details, dict) and link.details:
+            return link.details
+    return {}
 
 
 def _value(source, key, fallback=""):
@@ -100,7 +104,7 @@ def _value(source, key, fallback=""):
 def establishment_entity(establishment, entity_uuid, licensing=None):
     """Return the Entity identity and string-only property payload."""
     licensing = (
-        licensing if licensing is not None else _licensing_details(establishment)
+        licensing if licensing is not None else _source_details(establishment)
     )
     province = establishment.province.name if establishment.province else ""
     district = establishment.district.name if establishment.district else ""

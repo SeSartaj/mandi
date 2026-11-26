@@ -1,9 +1,11 @@
 # External source integration contract
 
 This is the contract an external registry must satisfy so Mandi can ingest its
-records. The current implementation of the contract is the Licensing API
-(`docs/licensing-api-reference.md`); Licensing is the only directly supported
-source, and Archive/Survey are delivered as references inside Licensing records.
+records. Two systems implement it directly today: the Licensing API
+(`docs/licensing-api-reference.md`) for company, factory, pharmacy and
+wholesale records, and the Survey API (`docs/survey-api-reference.md`) for
+pharmacy and wholesale registrations. Archive references still arrive as
+metadata inside Licensing records.
 
 Mandi is a **read-only consumer**. It never creates, updates, or deletes data in
 the source system. All credentials stay on Mandi's server.
@@ -14,7 +16,7 @@ Mandi uses two paths:
 
 | Path | Trigger | What it does |
 | --- | --- | --- |
-| Automatic registry sync | `registry-worker` (`sync_registries`), every `LICENSING_SYNC_INTERVAL` seconds | Pages through the list endpoints, fetches each record's detail, creates new establishments, refreshes changed identities |
+| Automatic registry sync | `registry-worker` (`sync_registries`), every source's sync interval | Pages through the list endpoints, fetches each record's detail, creates new establishments, refreshes changed identities |
 | On demand | `Import from registry`, connect a source, open a source profile, "Refresh registry identity" | Searches the list endpoint, fetches a chosen record's detail |
 
 New records are discovered when the list page returns an `application_id` that
@@ -40,6 +42,20 @@ fields. Mandi does **not** need a webhook, push notification, or write access.
 Additional Mandi establishment types (hospital, clinic, …) can exist locally but
 are not populated by the Licensing contract.
 
+The Survey adapter supports only pharmacies and wholesalers:
+
+| Survey category | Mandi kind |
+| --- | --- |
+| `pharmacy` | `pharmacy` |
+| `wholesale` | `wholesaler` |
+
+Survey `application_id` values are numeric and globally unique across pharmacy
+and wholesale. Mandi uses the bare `application_id` as the external ID. An
+existing `survey_id` link means the record is already connected: sync never
+creates a second establishment. If the existing link belongs to a different
+Mandi establishment type, the record is counted as skipped (a duplicate or
+upstream type conflict) instead of being imported again.
+
 ## 3. Transport
 
 - Base URL: an origin only, without `/api` (configured in Mandi's environment).
@@ -61,6 +77,25 @@ Licensing shape is:
 
 `category` is singular and one of `company`, `factory`, `pharmacy`, `wholesale`.
 A different URL layout is acceptable only with a Mandi adapter that maps it.
+
+Survey exposes two categories:
+
+```
+/api/applications/pharmacy/registration/list/
+/api/applications/pharmacy/registration/{application_id}/
+/api/applications/wholesale/registration/list/
+/api/applications/wholesale/registration/{application_id}/
+```
+
+Survey uses the same `X-API-KEY` header but has no `next` link; Mandi derives the
+next page from `count`. It accepts `search`, `page`, `page_size` (1–100, default
+15), the list filters (`province`, `district`, `village`, `name`,
+`application_status`, `application_step`, `grade`, `grade_type`, `is_official`,
+`has_lawyer`, `has_pharmacist`, `confirmed_by_*`, `tin_number`,
+`opening_letter_number`, `years_of_activity*`, `owner_*`) and `ordering`.
+Survey detail responses return the full registration record, including owner,
+technical staff, Sharia lawyer, surveyors, attachments and workflow users;
+Mandi uses the same response for its source profile.
 
 ## 5. List endpoint
 

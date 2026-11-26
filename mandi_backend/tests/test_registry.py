@@ -16,7 +16,12 @@ from apps.integrations.registry import ADAPTERS, detail_with_field_ids
 from apps.integrations.services import source_search
 
 
-@override_settings(LICENSING_BASE_URL="", LICENSING_REGISTRATION_API_KEY="")
+@override_settings(
+    LICENSING_BASE_URL="",
+    LICENSING_REGISTRATION_API_KEY="",
+    SURVEY_BASE_URL="",
+    SURVEY_REGISTRATION_API_KEY="",
+)
 class RegistryTests(TestCase):
     def setUp(self):
         self.actor = get_user_model().objects.create_superuser(username="registry-manager", password="test-password")

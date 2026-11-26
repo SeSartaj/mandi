@@ -207,8 +207,8 @@ def disconnect_source(actor, pk, source):
 def establishment_choice_csv(limit=None, kind=None):
     """CSV consumed by an XLSForm select_one_from_file establishments.csv.
 
-    Includes the Licensing fields the collector needs after selecting an
-    establishment. Only the stored business/contact projection is exported.
+    Includes the Licensing or Survey fields the collector needs after selecting
+    an establishment. Only the stored business/contact projection is exported.
     """
     qs = Establishment.objects.order_by("-updated_at")
     if kind:
@@ -219,9 +219,17 @@ def establishment_choice_csv(limit=None, kind=None):
     from .models import EstablishmentType, SourceLink
 
     labels = dict(EstablishmentType.objects.values_list("code", "name"))
+    establishment_ids = [row.pk for row in rows]
     licensing = dict(
         SourceLink.objects.filter(
-            source="licensing", establishment_id__in=[row.pk for row in rows]
+            source="licensing", establishment_id__in=establishment_ids
+        ).values_list("establishment_id", "details")
+    )
+    # Survey-only establishments still contribute owner/contact details when
+    # Licensing has no mapping for them.
+    survey = dict(
+        SourceLink.objects.filter(
+            source="survey", establishment_id__in=establishment_ids
         ).values_list("establishment_id", "details")
     )
     columns = [
@@ -247,7 +255,7 @@ def establishment_choice_csv(limit=None, kind=None):
     writer = csv.writer(buffer)
     writer.writerow(columns)
     for establishment in rows:
-        details = licensing.get(establishment.pk) or {}
+        details = licensing.get(establishment.pk) or survey.get(establishment.pk) or {}
         source = [details.get(column, "") for column in columns[5:]]
         writer.writerow(
             [
@@ -285,6 +293,7 @@ def _source_map_details(establishment, record):
         "province",
         "district",
         "address",
+        "village",
         "house_number",
         "floor",
         "market",
@@ -303,6 +312,26 @@ def _source_map_details(establishment, record):
         "technical_staff_count",
         "activities",
         "status",
+        "tin_number",
+        "opening_letter_number",
+        "opening_letter_date",
+        "years_of_activity",
+        "current_entity_area",
+        "required_entity_area",
+        "wholesale_count_nearby",
+        "pharmacy_count_nearby",
+        "distance_to_nearest_pharmacy",
+        "distance_to_nearest_health_center",
+        "type_of_health_center",
+        "is_official",
+        "application_step",
+        "has_lawyer",
+        "has_pharmacist",
+        "confirmed_by_team_leader",
+        "confirmed_by_project_coordinator",
+        "confirmed_by_audit",
+        "rejection_reason",
+        "is_resent",
     ):
         value = source_details.get(key)
         if value is not None and value != "":
@@ -310,6 +339,10 @@ def _source_map_details(establishment, record):
     location = source_details.get("location")
     if location:
         details["location"] = location
+    mappings = record.get("external_mappings") or {}
+    for related in ("survey", "archive"):
+        if mappings.get(related):
+            details[f"{related}_id"] = str(mappings[related])
     return details
 
 
@@ -440,7 +473,9 @@ def sync_registry_record(actor, source, kind, record):
         obj = Establishment.objects.select_for_update().get(pk=link.establishment_id)
         link.refresh_from_db()
         if obj.kind_id != kind:
-            raise ValidationError("The external record is mapped to another establishment type.")
+            # Survey IDs are global: a `survey_id` already connected to another
+            # establishment is the same record. Do not create a duplicate.
+            return "skipped"
         if not link.is_primary:
             return "skipped"
         sync_related_mappings(actor, obj, source, record)

@@ -10,7 +10,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.test import APIClient
 
 
-@override_settings(LICENSING_BASE_URL="")
+@override_settings(LICENSING_BASE_URL="", SURVEY_BASE_URL="", SURVEY_REGISTRATION_API_KEY="")
 class WorkflowTests(TestCase):
     def setUp(self):
         self.manager = get_user_model().objects.create_user(

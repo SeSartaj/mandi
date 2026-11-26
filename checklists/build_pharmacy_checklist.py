@@ -35,12 +35,13 @@ SURVEY_HEADERS = [
 CHOICE_HEADERS = ["list_name", "name", "label::Dari (fa)", "label::English (en)"]
 
 SETTINGS = [
-    ["form_title", "form_id", "version", "default_language"],
+    ["form_title", "form_id", "version", "default_language", "mandi_establishment_filter"],
     [
         "چک لست ملی بازرسی دواخانه های شفاخانه ها ۱۴۰۵",
         "pharmacy_inspection_1405",
         "2026110801",
         "Dari (fa)",
+        "kind = 'pharmacy'",
     ],
 ]
 
@@ -589,11 +590,7 @@ def build_survey():
 
     # ------------------------------------------------------------- 10. scores
     group_start("scoring", "۱۰. نمره دهی", "10. Scoring")
-    note(
-        "scoring_intro",
-        "نمرات هر بخش بطور خودکار محاسبه میشود و حدود آن مطابق چک لست کاغذی است.",
-        "Each index is calculated automatically with the same ranges as the paper checklist.",
-    )
+
     for name, expression in score_rows:
         add("calculate", name, "", "", calculation=expression)
     for name, expression in max_rows:
@@ -628,12 +625,6 @@ def build_survey():
         "",
         "",
         calculation="if(${max_total} > 0, round(100 * ${score_total} div ${max_total}, 1), 0)",
-    )
-    add(
-        "note",
-        "score_summary",
-        "نمره نهایی: ${result_pct}% (${score_total} از ${max_total})",
-        "Final score: ${result_pct}% (${score_total} of ${max_total})",
     )
     group_end("scoring")
 
@@ -764,7 +755,7 @@ def main():
     settings = workbook.create_sheet("settings")
     for row in SETTINGS:
         settings.append(row)
-    style_sheet(settings, [62, 34, 14, 16])
+    style_sheet(settings, [62, 34, 14, 16, 34])
 
     workbook.save(OUTPUT)
     print(f"Wrote {OUTPUT}")

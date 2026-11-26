@@ -16,6 +16,7 @@ from .establishments import EstablishmentsCsv as EstablishmentsCsv
 from .establishment_types import EstablishmentTypeDetail as EstablishmentTypeDetail
 from .establishment_types import EstablishmentTypes as EstablishmentTypes
 from .establishments import SourceConnection as SourceConnection
+from .establishments import SourceDocument as SourceDocument
 from .establishments import SourceSearch as SourceSearch
 from .odk_projects import OdkProjectDetail as OdkProjectDetail
 from .odk_projects import OdkProjects as OdkProjects

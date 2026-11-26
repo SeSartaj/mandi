@@ -24,6 +24,7 @@ from .submissions import group_name, matches_answer_filters, _is_internal
 from .xlsform import (
     XlsFormError,
     add_establishment_question,
+    hide_result_notes,
     set_form_title,
 )
 
@@ -85,6 +86,7 @@ def deploy(actor, pk, project_id=None, force=False):
             content, _ = add_establishment_question(
                 Path(checklist.xlsform.name).name, source.read()
             )
+        content = hide_result_notes(content)
         content = set_form_title(content, checklist.name)
         workbook = load_workbook(io.BytesIO(content))
         sheet = workbook["settings"]

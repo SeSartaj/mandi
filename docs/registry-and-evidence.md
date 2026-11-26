@@ -8,11 +8,11 @@ An external system catalog entry selects an adapter from `apps/integrations/regi
 
 The contract a new source system must implement is documented in [external source integration contract](integration-contract.md).
 
-The Licensing adapter implements the four-category Licensing API contract supplied with the project: company → importer, factory → factory, pharmacy → pharmacy, wholesale → wholesaler. It is the single external application registry; archive and survey references are derived from it. No upstream writes are performed. Configure the origin with `LICENSING_BASE_URL` and the key with `LICENSING_REGISTRATION_API_KEY`; the same connection powers manual search/connect and automatic sync. Survey/archive support demonstration records only when `DEMO_INTEGRATIONS=1`; configure actual adapters for real use.
+The Licensing adapter implements the four-category Licensing API contract supplied with the project: company → importer, factory → factory, pharmacy → pharmacy, wholesale → wholesaler. The Survey adapter implements the pharmacy and wholesale registration endpoints, adding records that Licensing may not contain. Archive references are still derived from Licensing. No upstream writes are performed. Configure Licensing with `LICENSING_BASE_URL` and `LICENSING_REGISTRATION_API_KEY`, and Survey with `SURVEY_BASE_URL` and `SURVEY_REGISTRATION_API_KEY` (the value of Survey's `REGISTRATION_INTEGRATION_API_KEY`). The same connections power manual search/connect and automatic sync. Survey/archive support demonstration records only when `DEMO_INTEGRATIONS=1`; configure actual adapters for real use.
 
-## Automatic licensing sync
+## Automatic registry sync
 
-The single Compose stack includes a dedicated `registry-worker`, separate from ODK collection sync. With a Licensing origin/key configured, it automatically creates establishments and primary source mappings, then refreshes those identities on subsequent passes. Existing secondary mappings and ownership transfers to Mandi are respected; sync never adopts them implicitly. Missing upstream records are retained locally. No names are used for automatic merging.
+The single Compose stack includes a dedicated `registry-worker`, separate from ODK collection sync. It polls every active source with a configured adapter: Licensing and Survey today. With a source origin/key configured, it automatically creates establishments and primary source mappings, then refreshes those identities on subsequent passes. Existing secondary mappings and ownership transfers to Mandi are respected; sync never adopts them implicitly. Missing upstream records are retained locally. No names are used for automatic merging. Because Licensing already publishes the Survey ID for overlapping records, a Survey pass sees that secondary link and skips creating a duplicate.
 
 Server-only configuration:
 
@@ -23,21 +23,31 @@ LICENSING_TIMEOUT=15
 LICENSING_SYNC_ENABLED=1
 LICENSING_SYNC_INTERVAL=60
 LICENSING_SYNC_PAGE_SIZE=50
+SURVEY_BASE_URL=https://survey.example.com
+SURVEY_REGISTRATION_API_KEY=<integration key>
+SURVEY_TIMEOUT=15
+SURVEY_SYNC_ENABLED=1
+SURVEY_SYNC_INTERVAL=300
+SURVEY_SYNC_PAGE_SIZE=50
 ```
 
-Use the backend **origin**, without `/api` appended: the client constructs `/api/applications/{category}/registration/list/` and its detail routes. The actual key is stored only in ignored environment files, not this document.
+Use each backend **origin**, without `/api` appended: the clients construct the
+documented registration list and detail routes. The actual keys are stored only
+in ignored environment files, not this document.
 
 The deployed Licensing origin is `http://192.168.1.4:8008`. An older backup contains `http://10.10.0.125:8001`, a previous developer-local instance; do not use it. The Licensing frontend's own `.env.local` describes its browser API and is not Mandi's configuration.
 
-Each batch fetches one page per active supported type, ordered by `created_at`, then fetches details for complete identity/location/status. Page size is capped at 100. Page cursors survive worker restarts. The last page wraps to page one so all records are revisited; 60 seconds is the pause between batches, not a promise that every establishment refreshes every minute. Per-record failures are retried on the next full pass; page failures retain their cursor, and invalid later-page 404s reset to page one. A PostgreSQL advisory lock prevents overlapping batches from separate workers/manual commands. Error/status records contain no API keys, raw profiles or upstream response bodies.
+Each batch fetches one page per active supported type, then fetches details for complete identity/location/status. Licensing pages are ordered by `created_at`; Survey pages follow Survey's most-recently-updated order and Mandi derives the next page from `count`. Page size is capped at 100. Page cursors survive worker restarts. The last page wraps to page one so all records are revisited; the configured interval is the pause between batches, not a promise that every establishment refreshes every minute. Per-record failures are retried on the next full pass; page failures retain their cursor, and invalid later-page 404s reset to page one. A PostgreSQL advisory lock prevents overlapping batches from separate workers/manual commands. Error/status records contain no API keys, raw profiles or upstream response bodies.
 
 View progress/errors under **Establishments → Automatic licensing sync** or `GET /api/v1/registry/sync/`. The UI refresh button reloads status. Trigger one bounded batch with:
 
 ```sh
 docker compose exec registry-worker python manage.py sync_registries --once
+# one source only
+docker compose exec registry-worker python manage.py sync_registries --once --source survey
 ```
 
-It will report `busy` if the worker is already running a batch. Configure `MANDI_SYNC_USERNAME` to choose an existing active Mandi user with view/add/change establishment and view/change source-link permissions; the bootstrap administrator is the default. Set `LICENSING_SYNC_ENABLED=0` to pause automatic registry ingestion while Mandi and ODK continue operating.
+It will report `busy` if the worker is already running a batch. Configure `MANDI_SYNC_USERNAME` to choose an existing active Mandi user with view/add/change establishment and view/change source-link permissions; the bootstrap administrator is the default. Set `LICENSING_SYNC_ENABLED=0` or `SURVEY_SYNC_ENABLED=0` to pause one source's automatic ingestion while Mandi and ODK continue operating.
 
 ## External systems page
 
@@ -49,7 +59,7 @@ It will report `busy` if the worker is already running a batch. Configure `MANDI
 - `GET /api/v1/registry/systems/` returns the same state, including `configured`, `syncable`, `can_sync`, per-category cursors, and the latest `full_sync` request.
 - `POST /api/v1/registry/systems/{code}/sync/` accepts an optional `page_size` (1–100) and runs one batch.
 - `POST /api/v1/registry/systems/{code}/full-sync/` queues a complete pass (202) or reports the active request (200).
-- Licensing is directly syncable. Archive and Survey are delivered through Licensing, so their buttons stay disabled and their status reads **Derived from Licensing**.
+- Licensing and Survey are directly syncable. Archive is delivered through Licensing, so its buttons stay disabled and its status reads **Derived from Licensing**.
 - Viewing the page needs `establishments.view_establishment`; triggering either sync additionally needs view/add/change establishment and change source-link permissions.
 
 ## Workflow
@@ -109,6 +119,6 @@ docker compose exec registry-worker python manage.py sync_registries --full
 
 A complete pass holds the registry lock, visits every supported category/page once and exits; the normal worker resumes afterward. If another batch holds the lock, the command reports `busy`; retry after the current batch finishes. Page errors end that category's pass, while normal polling retries later.
 
-Establishment detail displays Licensing, Archive and Survey as separate sections. Archive/Survey sections state that their profiles are supplied through Licensing; no independent archive/survey API is assumed. Mandi checks the mapped ID before displaying a nested profile. The page uses a curated inspection profile: establishment information, readable location, owner/co-owner contacts, technical staff, legal representative, license, and activities/premises. Internal IDs, repeated multilingual lookup objects, personal identity documents, birth information, fingerprints, tax numbers and raw workflow/finance data are omitted. Reference names display once using the selected UI language, and profile labels are translated into Dari and Pashto. The sidebar lists all configured establishment types and opens the corresponding filtered list. Unknown upstream province values remain empty instead of preventing an otherwise valid import.
+Establishment detail displays Licensing, Archive and Survey as separate sections. The Overview tab embeds the Licensing profile and, when a Survey link exists, the full Survey profile as well. When Survey is configured, its section loads the current Survey registration profile directly; Archive remains supplied through Licensing. If the live Survey record is unavailable, the Survey section falls back to the profile embedded in the linked Licensing record. Licensing profiles include an **Attachments** section with every attachment URL the record exposes (license, request letter, stamp, land ownership, Sharia lawyer document, finance/press responses and extras). Survey attachment URLs are shown when files exist; the unified Survey **Attachments** section covers the registration's opening letter, form attachment and other attachments, plus owner, technical-staff and Sharia-lawyer documents when the viewer has sensitive-source permission. When a registration has none, Mandi states that explicitly; when only hidden identity/professional documents exist, it explains the permission requirement. Mandi checks the mapped ID before displaying a nested profile. The page uses a curated inspection profile: establishment information, readable location, owner/co-owner contacts, technical staff, legal representative, license, and activities/premises. Internal IDs, repeated multilingual lookup objects, personal identity documents, birth information, fingerprints, tax numbers and raw workflow/finance data are omitted. Reference names display once using the selected UI language, and profile labels are translated into Dari and Pashto. The sidebar lists all configured establishment types and opens the corresponding filtered list. Unknown upstream province values remain empty instead of preventing an otherwise valid import.
 
 Non-privileged users see the operational projection of source details; users with `view_sensitive_source_details` may see the additional fields the Licensing API exposes.

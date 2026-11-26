@@ -100,6 +100,32 @@ class LicensingDetailProjectionTests(SimpleTestCase):
         result = application_details("pharmacy", {"application_id": "P-1", "address": None, "applicant": None})
         self.assertEqual(len(result["sections"]), 1)
 
+    def test_all_attachment_fields_are_projected(self):
+        from apps.integrations.licensing import application_details
+        result = application_details("pharmacy", {
+            "application_id": "P-1",
+            "request_letter_attachment": {"file": "https://licensing.test/request.pdf"},
+            "stamp_attachment": {"file": "https://licensing.test/stamp.png"},
+            "land_ownership_attachment": {"file": "https://licensing.test/land.pdf"},
+            "finance_response_attachment": {"file": "https://licensing.test/finance.pdf"},
+            "extra_attachments": [
+                {"file": "https://licensing.test/extra-1.pdf"},
+                {"file": "https://licensing.test/extra-2.pdf"},
+            ],
+        })
+        attachments = next(
+            section for section in result["sections"] if section["title"] == "Attachments"
+        )
+        values = {field["label"]: field["value"] for field in attachments["fields"]}
+        self.assertEqual(values["Request letter"], "https://licensing.test/request.pdf")
+        self.assertEqual(values["Stamp"], "https://licensing.test/stamp.png")
+        self.assertEqual(values["Land ownership"], "https://licensing.test/land.pdf")
+        self.assertEqual(values["Finance response"], "https://licensing.test/finance.pdf")
+        self.assertEqual(values["Extra attachments"], [
+            "https://licensing.test/extra-1.pdf",
+            "https://licensing.test/extra-2.pdf",
+        ])
+
     def test_profile_includes_form_relevant_identity_license_and_premises(self):
         from apps.integrations.licensing import application_details
         result = application_details("factory", {

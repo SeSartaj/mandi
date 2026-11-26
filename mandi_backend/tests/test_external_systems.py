@@ -31,6 +31,8 @@ class FakeLicensingAdapter:
 @override_settings(
     LICENSING_BASE_URL="http://licensing.test",
     LICENSING_REGISTRATION_API_KEY="key",
+    SURVEY_BASE_URL="",
+    SURVEY_REGISTRATION_API_KEY="",
 )
 class ExternalSystemEndpointTests(TestCase):
     def setUp(self):

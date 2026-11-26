@@ -1,7 +1,9 @@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+
 import { pharmacyTypeLabel } from "@/features/shared/labels";
+import { apiUrl } from "@/lib/api";
 
 export type SourceDetail = {
   name: string;
@@ -62,6 +64,16 @@ export function DeferredMap({
       )}
     </div>
   );
+}
+
+/**
+ * Source documents are proxied by Mandi: the server attaches the upstream
+ * `X-API-KEY`, so the browser only ever receives a signed Mandi link.
+ */
+const DOCUMENT_LINK = /^sources\/[a-z0-9_-]+\/document\/\?/i;
+
+function isDocumentLink(value: string) {
+  return DOCUMENT_LINK.test(value) || /^https?:\/\//i.test(value);
 }
 
 function label(key: string) {
@@ -165,9 +177,14 @@ export function SourceValue({ value }: { value: unknown }) {
     yes: "Yes",
     no: "No",
   };
-  if (/^https?:\/\//i.test(text))
+  if (isDocumentLink(text))
     return (
-      <a className="text-link break-all" href={text} target="_blank" rel="noopener noreferrer">
+      <a
+        className="text-link break-all"
+        href={apiUrl(text)}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
         {t("Open document")}
       </a>
     );

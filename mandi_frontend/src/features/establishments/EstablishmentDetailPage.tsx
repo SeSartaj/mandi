@@ -124,6 +124,17 @@ export default function EstablishmentDetailPage() {
         permissions.includes("establishments.view_sourcelink"),
     },
   );
+  const surveyLink = data.data?.source_links.find((link) => link.source === "survey");
+  const survey = useApiQuery<SourceDetail>(
+    ["survey-profile", id],
+    `/establishments/${id}/sources/survey/`,
+    {},
+    {
+      enabled:
+        Boolean(surveyLink) &&
+        permissions.includes("establishments.view_sourcelink"),
+    },
+  );
   const groups = useApiQuery<SubmissionGroup[]>(
     ["establishment-submission-groups", id],
     `/establishments/${id}/collection-groups/`,
@@ -278,6 +289,34 @@ export default function EstablishmentDetailPage() {
                 />
               ) : licensing.data ? (
                 <SourceDetails data={licensing.data} stacked showLocationMap={false} />
+              ) : null}
+            </PageSection>
+          ) : null}
+
+          {surveyLink && permissions.includes("establishments.view_sourcelink") ? (
+            <PageSection
+              title={t("Survey details")}
+              description={t(
+                "Registration, ownership, staff and location from Survey.",
+              )}
+              actions={
+                <Link
+                  className="text-link print:hidden"
+                  to={`/establishments/${establishment.id}/sources/survey`}
+                >
+                  {t("Open full profile")}
+                </Link>
+              }
+            >
+              {survey.isPending ? (
+                <AppLoader label={t("Loading Survey details…")} className="py-8" />
+              ) : survey.error ? (
+                <AppErrorState
+                  message={errorMessage(survey.error)}
+                  onRetry={() => survey.refetch()}
+                />
+              ) : survey.data ? (
+                <SourceDetails data={survey.data} stacked showLocationMap={false} />
               ) : null}
             </PageSection>
           ) : null}

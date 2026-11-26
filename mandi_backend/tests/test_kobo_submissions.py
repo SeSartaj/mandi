@@ -45,6 +45,33 @@ SUBMISSION = {
 }
 
 
+class EstablishmentLinkTests(SimpleTestCase):
+    """A submission must find its establishment whether the question is
+    top level or inside a group (``visit/establishment_id``)."""
+
+    def normalize(self, answers):
+        from apps.integrations.odk import OdkProvider
+
+        return OdkProvider.normalize(
+            {
+                "__id": "sub-1",
+                "__system": {"submissionDate": "2026-11-26T08:00:00.000Z"},
+                **answers,
+            }
+        )
+
+    def test_top_level_question_resolves(self):
+        remote = self.normalize({"establishment_id": "uuid-top"})
+        self.assertEqual(remote.establishment_id, "uuid-top")
+
+    def test_grouped_question_resolves(self):
+        remote = self.normalize({"visit": {"establishment_id": "uuid-grouped"}})
+        self.assertEqual(remote.establishment_id, "uuid-grouped")
+
+    def test_missing_question_returns_empty(self):
+        self.assertEqual(self.normalize({"visit": {"other": "1"}}).establishment_id, "")
+
+
 class FormSchemaTests(SimpleTestCase):
     def test_labels_and_choices_use_the_default_translation(self):
         schema = form_schema(ASSET)

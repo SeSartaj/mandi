@@ -137,11 +137,18 @@ images only after verifying backups and which releases you want to retain.
    version. Changing field types may require a new checklist, because Central
    enforces compatibility with previously published forms.
 3. Mandi inserts a required root `establishment_id` selector if missing, creates
-   or reconciles the project's `establishments` Entity List, and links it to the
-   form before publishing. Keep the Entity List current with the entity sync
-   worker; changes reach devices on their next form update without redeploying
-   the form. Existing custom `establishment_id` questions are preserved; ensure
-   they submit the ODK Entity UUID, not an establishment name.
+   or reconciles the project's single `establishments` Entity List, and links it
+   to the form before publishing. All establishments are in that one list; each
+   form filters it with `choice_filter` on properties such as `kind`, `province`,
+   `district`, `grade`, or `pharmacy_type`. Mandi uses the form's own filter,
+   `mandi_establishment_filter`, or `kind = ${establishment_type}` when the form
+   has an `establishment_type` question. Keep the Entity List current with the
+   entity sync worker; changes reach devices on their next form update without
+   redeploying the form. Existing custom `establishment_id` questions are
+   preserved; ensure they submit the ODK Entity UUID, not an establishment name.
+4. Score and result notes are hidden from collectors during deployment
+   (`relevant=false()`), while the underlying calculations are still submitted
+   for manager reporting.
 4. Create an employee, assign Mandi permission groups, and use **Manage** to edit
    their name/position, reset passwords, change groups, deactivate accounts, and
    limit access to selected checklists.
@@ -264,4 +271,4 @@ issuance on a real server and collection from a physical device still need an
 acceptance run. Django's optional HSTS subdomain/preload advisories remain;
 deployment checks fail on errors, without requiring either policy.
 
-See [registry configuration and testing](registry-and-evidence.md) to enable automatic establishment creation and identity refresh from the Licensing API. Both workers are included in the same Compose project and updated by `scripts/deploy.sh`.
+See [registry configuration and testing](registry-and-evidence.md) to enable automatic establishment creation and identity refresh from the Licensing and Survey APIs. Both workers are included in the same Compose project and updated by `scripts/deploy.sh`.

@@ -373,19 +373,6 @@ def survey_rows():
             "round((${score_total} div ${max_total}) * 100)",
             "",
         ),
-        (
-            "note",
-            "summary",
-            "امتیاز مجموعی: ${score_total} از ${max_total} (${result_pct}%)",
-            "Total score: ${score_total} of ${max_total} (${result_pct}%)",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-        ),
     ]
     return rows
 

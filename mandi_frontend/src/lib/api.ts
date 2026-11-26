@@ -63,6 +63,14 @@ export function fileUrl(path: string | null | undefined): string {
     return path;
   }
 }
+
+/** Resolve a path relative to the API root, e.g. a signed source-document link. */
+export function apiUrl(path: string | null | undefined): string {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  const base = (api.defaults.baseURL || "/api/v1").replace(/\/$/, "");
+  return `${base}/${path.replace(/^\//, "")}`;
+}
 export type Employee = {
   id: number;
   username: string;

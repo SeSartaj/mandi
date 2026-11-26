@@ -4,7 +4,7 @@ import { useApiQuery } from "@/features/shared/api";
 
 export type RegistryCatalog = {
   types: { code: string; name: string }[];
-  systems: { code: string; name: string; adapter: string; searchable?: boolean }[];
+  systems: { code: string; name: string; adapter: string; searchable?: boolean; kinds?: string[] }[];
   provinces: { id: number; name: string; name_local: string }[];
   districts: { id: number; name: string; name_local: string; province_id: number }[];
 };

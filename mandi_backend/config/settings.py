@@ -115,6 +115,12 @@ LICENSING_BASE_URL = os.getenv("LICENSING_BASE_URL", "")
 LICENSING_REGISTRATION_API_KEY = os.getenv("LICENSING_REGISTRATION_API_KEY", "")
 LICENSING_TIMEOUT = float(os.getenv("LICENSING_TIMEOUT", "15"))
 
+# Survey registration credentials stay on the backend. The key must match the
+# Survey deployment's REGISTRATION_INTEGRATION_API_KEY.
+SURVEY_BASE_URL = os.getenv("SURVEY_BASE_URL", "")
+SURVEY_REGISTRATION_API_KEY = os.getenv("SURVEY_REGISTRATION_API_KEY", "")
+SURVEY_TIMEOUT = float(os.getenv("SURVEY_TIMEOUT", "15"))
+
 # Collection services remain optional: Mandi starts and serves records during outages.
 COLLECTION_PROVIDER = os.getenv("COLLECTION_PROVIDER", "odk")
 ODK_BASE_URL = os.getenv("ODK_BASE_URL", "http://central-service:8383")
@@ -145,3 +151,11 @@ LICENSING_SYNC_ENABLED = os.getenv("LICENSING_SYNC_ENABLED", "1") == "1" and boo
 )
 LICENSING_SYNC_INTERVAL = int(os.getenv("LICENSING_SYNC_INTERVAL", "60"))
 LICENSING_SYNC_PAGE_SIZE = int(os.getenv("LICENSING_SYNC_PAGE_SIZE", "50"))
+
+# Survey registrations are a second direct registry, limited to pharmacies and
+# wholesalers. Survey may contain businesses that Licensing does not.
+SURVEY_SYNC_ENABLED = os.getenv("SURVEY_SYNC_ENABLED", "1") == "1" and bool(
+    os.getenv("SURVEY_BASE_URL") and os.getenv("SURVEY_REGISTRATION_API_KEY")
+)
+SURVEY_SYNC_INTERVAL = int(os.getenv("SURVEY_SYNC_INTERVAL", "300"))
+SURVEY_SYNC_PAGE_SIZE = int(os.getenv("SURVEY_SYNC_PAGE_SIZE", "50"))

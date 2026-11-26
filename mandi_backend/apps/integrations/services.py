@@ -3,6 +3,8 @@ from rest_framework.exceptions import NotFound, ValidationError
 from apps.accounts.services import require
 from apps.establishments.models import Establishment, SourceLink
 
+from . import documents
+
 
 def source_candidates(actor, source, kind, search="", page=1, page_size=20):
     require(actor, "establishments.view_sourcelink")
@@ -49,7 +51,7 @@ def establishment_choices(actor, kind=None, checklist_id=None):
     ]
 
 
-def source_search(actor, source, kind, search="", page=1, page_size=20):
+def source_search(actor, source, kind, search="", page=1, page_size=20, filters=None):
     require(actor, "establishments.view_sourcelink")
     from .registry import adapter_for
     adapter = adapter_for(source)
@@ -57,7 +59,27 @@ def source_search(actor, source, kind, search="", page=1, page_size=20):
         raise ValidationError(
             "This source is not connected. Configure a live adapter before use."
         )
+    if filters:
+        return adapter.search(kind, search, page, page_size, filters=filters)
     return adapter.search(kind, search, page, page_size)
+
+
+def _survey_via_licensing(establishment, link, include_sensitive):
+    """Older Survey IDs may only exist inside a linked Licensing record."""
+    primary = establishment.source_links.filter(source="licensing").first()
+    if not primary:
+        return None
+    from .registry import adapter_for, detail_with_field_ids
+    upstream = adapter_for(primary.source)
+    if not upstream or not hasattr(upstream, "_record"):
+        return None
+    from . import licensing
+    _, raw = upstream._record(establishment.kind_id, primary.external_id)
+    return detail_with_field_ids(
+        licensing.related_details(
+            raw, "survey", link.external_id, include_sensitive=include_sensitive
+        )
+    )
 
 
 def source_detail(actor, establishment_id, source, include_sensitive=None):
@@ -73,9 +95,29 @@ def source_detail(actor, establishment_id, source, include_sensitive=None):
     adapter = adapter_for(source)
     include_sensitive = include_sensitive is not False and actor.has_perm("establishments.view_sensitive_source_details")
     if adapter:
-        from .registry import LicensingAdapter
-        options = {"include_sensitive": include_sensitive} if isinstance(adapter, LicensingAdapter) else {}
-        detail = adapter.details(establishment.kind_id, link.external_id, **options)
+        from .registry import LicensingAdapter, SurveyAdapter
+        options = (
+            {"include_sensitive": include_sensitive}
+            if isinstance(adapter, (LicensingAdapter, SurveyAdapter))
+            else {}
+        )
+        try:
+            detail = adapter.details(establishment.kind_id, link.external_id, **options)
+        except NotFound:
+            fallback = (
+                _survey_via_licensing(establishment, link, include_sensitive)
+                if source == "survey"
+                else None
+            )
+            if fallback:
+                return documents.rewrite(fallback, source)
+            raise
+        if source == "survey" and not detail.get("sections"):
+            fallback = _survey_via_licensing(
+                establishment, link, include_sensitive
+            )
+            if fallback:
+                return documents.rewrite(fallback, source)
         # Store only business coordinates, never the full source profile.
         if link.is_primary:
             sections = detail.get("sections", [])
@@ -98,6 +140,7 @@ def source_detail(actor, establishment_id, source, include_sensitive=None):
                 ("province", "Province"),
                 ("district", "District"),
                 ("address", "Address"),
+                ("village", "Village"),
                 ("house_number", "House number"),
                 ("floor", "Floor"),
                 ("market", "Market"),
@@ -129,7 +172,7 @@ def source_detail(actor, establishment_id, source, include_sensitive=None):
                 latitude=location["latitude"] if location else None,
                 longitude=location["longitude"] if location else None,
             )
-        return detail_with_field_ids(detail)
+        return documents.rewrite(detail_with_field_ids(detail), source)
     if source in {"archive", "survey"}:
         from . import licensing
         primary = establishment.source_links.filter(source="licensing").order_by("-is_primary").first()
@@ -137,5 +180,12 @@ def source_detail(actor, establishment_id, source, include_sensitive=None):
             upstream = adapter_for(primary.source)
             if upstream:
                 _, raw = upstream._record(establishment.kind_id, primary.external_id)
-                return detail_with_field_ids(licensing.related_details(raw, source, link.external_id, include_sensitive=include_sensitive))
+                return documents.rewrite(
+                    detail_with_field_ids(
+                        licensing.related_details(
+                            raw, source, link.external_id, include_sensitive=include_sensitive
+                        )
+                    ),
+                    source,
+                )
     raise ValidationError("This source is temporarily unavailable; the local establishment remains accessible.")

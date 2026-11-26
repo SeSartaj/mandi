@@ -64,6 +64,7 @@ for route, view in [
     ("establishment-types/<slug:code>/", api.EstablishmentTypeDetail),
     ("establishments/<uuid:pk>/sources/<str:source>/", api.SourceConnection),
     ("sources/<str:source>/", api.SourceSearch),
+    ("sources/<str:source>/document/", api.SourceDocument),
     ("integrations/establishment-choices/", api.Choices),
     ("checklists/", api.Checklists),
     ("checklists/metadata/", api.ChecklistMetadata),

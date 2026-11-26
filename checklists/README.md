@@ -27,7 +27,9 @@ Sections follow the paper checklist:
 7. وضعیت عمومی ساختمان – scored, max 8
 8. کارمندان و خدمات – scored, max 5
 9. موجودیت کتب ماخذ – yes/no, not scored
-10. نمره دهی – calculated automatically (`result_pct` note shows the final score)
+10. نمره دهی – calculated automatically; the visible result note is hidden from
+    collectors at deployment, while `result_pct` remains in the submission for
+    manager reporting
 11. سایر مشاهدات – free text
 12. هدایات تیم بازرسی – repeat group of issues and agreed actions
 13. تعهد مالک و مسئول فنی – confirmation
@@ -61,10 +63,18 @@ appearance: search
 required: yes
 ```
 
-and links the project's `establishments` Entity List to that attachment. Forms
-select a live Entity, so establishment changes do not require redeploying the
-form. Submissions are matched to establishments through the selected Entity
+and links the project's single `establishments` Entity List to that attachment.
+Forms select a live Entity, so establishment changes do not require redeploying
+the form. Submissions are matched to establishments through the selected Entity
 UUID.
+
+Every form in a project shares that one Entity List. Restrict a form's choices
+with a `choice_filter`, for example `kind = 'pharmacy'`,
+`kind = 'pharmacy' and grade = '2'`, or `province = 'Kabul'`. You can also set
+`mandi_establishment_filter` in the workbook's `settings` sheet and let Mandi
+write the filter when it injects the selector. If the form already contains an
+`establishment_type` question, Mandi uses `kind = ${establishment_type}`
+unless a filter is already present.
 
 ## Regenerating the workbook
 
@@ -80,3 +90,11 @@ Validate a change with pyxform (KoBo runs the same converter):
 docker cp checklists/pharmacy_inspection_checklist_1405.xlsx kobofe-kpi-1:/tmp/pharm.xlsx
 docker exec kobofe-kpi-1 python -c "from pyxform.xls2xform import xls2xform_convert; print(xls2xform_convert('/tmp/pharm.xlsx','/tmp/pharm.xml'))"
 ```
+
+## Other workbooks in this folder
+
+| Workbook | Builder | Documentation |
+| --- | --- | --- |
+| `kabul_pharmacy_checklist.xlsx` | `build_kabul_pharmacy_checklist.py` | `KABUL-PHARMACY.md` – short Kabul pharmacy form in Dari/Pashto/English, one screen per section: automatic location, audit data and inspection duration, five evidence photos, 0/1 scoring of three sections with automatic percentages, samples/quarantine repeat, inspector signatures |
+| `media_test_checklist.xlsx` | `build_media_test_checklist.py` | `MEDIA-TEST.md` – exercises every input type |
+| `establishment_inspection_form.xlsx` | `build_establishment_inspection_form.py` | `INSPECTION-DEMO.md` |

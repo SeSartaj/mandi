@@ -3,7 +3,7 @@ from io import BytesIO
 from django.test import SimpleTestCase
 from openpyxl import Workbook, load_workbook
 
-from apps.integrations.xlsform import XlsFormError, add_establishment_question
+from apps.integrations.xlsform import XlsFormError, add_establishment_question, hide_result_notes
 
 
 def make_workbook(headers, rows, sheet_name="survey"):
@@ -123,6 +123,78 @@ class AddEstablishmentQuestionTests(SimpleTestCase):
         rows = {row["name"]: row for row in read_survey(updated)}
         self.assertIn("establishment_id", rows)
         self.assertIn(rows["establishment_id"]["required"], (None, ""))
+
+    def test_type_question_gets_automatic_kind_filter(self):
+        content = make_workbook(
+            ["type", "name", "label"],
+            [
+                ["select_one est_type", "establishment_type", "Type"],
+                ["text", "respondent_name", "Respondent name"],
+            ],
+        )
+        updated, _ = add_establishment_question("form.xlsx", content)
+        rows = {row["name"]: row for row in read_survey(updated)}
+        self.assertEqual(
+            rows["establishment_id"]["choice_filter"],
+            "kind = ${establishment_type}",
+        )
+
+    def test_filter_setting_is_applied_without_lowercasing(self):
+        workbook = load_workbook(BytesIO(make_workbook(
+            ["type", "name", "label"], [["text", "respondent_name", "Name"]]
+        )))
+        settings = workbook.create_sheet("settings")
+        settings.append(["form_id", "mandi_establishment_filter"])
+        settings.append(["test", "kind = 'pharmacy' and province = 'Kabul'"])
+        output = BytesIO()
+        workbook.save(output)
+        updated, _ = add_establishment_question("form.xlsx", output.getvalue())
+        rows = {row["name"]: row for row in read_survey(updated)}
+        self.assertEqual(
+            rows["establishment_id"]["choice_filter"],
+            "kind = 'pharmacy' and province = 'Kabul'",
+        )
+
+    def test_existing_establishment_filter_is_preserved(self):
+        content = make_workbook(
+            ["type", "name", "label", "choice_filter"],
+            [
+                [
+                    "select_one_from_file establishments.csv",
+                    "establishment_id",
+                    "Establishment",
+                    "kind = 'factory'",
+                ],
+                ["select_one est_type", "establishment_type", "Type", ""],
+            ],
+        )
+        updated, _ = add_establishment_question("form.xlsx", content)
+        rows = {row["name"]: row for row in read_survey(updated)}
+        self.assertEqual(rows["establishment_id"]["choice_filter"], "kind = 'factory'")
+
+
+class HideResultNotesTests(SimpleTestCase):
+    def test_score_summary_is_hidden_but_calculation_is_kept(self):
+        content = make_workbook(
+            ["type", "name", "label", "calculation", "relevant"],
+            [
+                ["calculate", "score_total", "", "1 + 1", ""],
+                ["note", "score_summary", "Final score: ${result_pct}%", "", ""],
+                ["text", "respondent_name", "Respondent name", "", ""],
+            ],
+        )
+        updated = hide_result_notes(content)
+        rows = {row["name"]: row for row in read_survey(updated)}
+        self.assertEqual(rows["score_total"]["type"], "calculate")
+        self.assertEqual(rows["score_summary"]["relevant"], "false()")
+        self.assertIn(rows["respondent_name"]["relevant"], (None, ""))
+
+    def test_form_without_results_is_returned_unchanged(self):
+        content = make_workbook(
+            ["type", "name", "label"],
+            [["text", "respondent_name", "Respondent name"]],
+        )
+        self.assertEqual(hide_result_notes(content), content)
 
 
 class ChecklistMetadataTests(SimpleTestCase):
