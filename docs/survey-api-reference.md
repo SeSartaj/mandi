@@ -139,7 +139,9 @@ The detail endpoint returns all registration fields plus:
   attachment data is included; Mandi hides it unless the viewer has
   `establishments.view_sensitive_source_details`.
 - `surveyor`: the Survey users who created/worked on the record.
-- `opening_letter`, `form_attachment`, `other_attachments`: file URLs.
+- `opening_letter`, `form_attachment`, `other_attachments`: file URLs. The
+  files are served with the same `X-API-KEY`, so Mandi proxies them through
+  `GET /api/v1/sources/survey/document/?token=…` instead of linking directly.
 - `confirmed_by_*_user`, `rejected_by`: workflow users.
 - `gps_pharmacy_count_nearby`, `gps_distance_to_nearest_pharmacy`:
   PostGIS-derived proximity metrics.

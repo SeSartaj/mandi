@@ -64,6 +64,14 @@ upstream type conflict) instead of being imported again.
   Mandi's backend and must not be exposed to browsers.
 - HTTPS is recommended. Mandi refuses redirects.
 - Mandi's timeout is configurable (`LICENSING_TIMEOUT`, default 15s).
+- Documents behind the key: when stored files are protected by the same
+  `X-API-KEY` (Licensing and Survey both are), the profile may return absolute
+  file URLs. Mandi never exposes them to a browser: it replaces each one with a
+  signed, one-hour link to `GET /api/v1/sources/{source}/document/?token=…`, and
+  that gateway re-requests the file with the key and streams it back as
+  `inline` with `Cache-Control: private, no-store`. Only URLs on the configured
+  source origin are fetched, redirects off that origin are refused, and files
+  over 40 MB are rejected.
 
 ## 4. Required endpoints
 
