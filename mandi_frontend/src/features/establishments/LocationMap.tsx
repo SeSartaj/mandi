@@ -21,6 +21,7 @@ type PopupItem = {
   house_number?: string | null;
   floor?: string | null;
   market?: string | null;
+  landmark?: string | null;
   pharmacy_type?: string | number | null;
   href?: string;
 };
@@ -38,7 +39,7 @@ export default function LocationMap({
   name?: string;
   address?: string | null;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const districtName = useDistrictName();
   const { id } = useParams();
   const nearby = useApiQuery<{ results: NearbyRow[]; count: number }>(
@@ -64,7 +65,15 @@ export default function LocationMap({
         title.className = "font-semibold";
       }
       const addressText = document.createElement("span");
-      addressText.textContent = localizeAddress(item.address) || "—";
+      const addressParts = [
+        item.house_number,
+        item.floor,
+        item.market,
+        item.landmark,
+      ].filter(Boolean) as string[];
+      const separator = i18n.language === "en" ? ", " : "، ";
+      addressText.textContent =
+        (addressParts.length ? addressParts.join(separator) : localizeAddress(item.address)) || "—";
       const rows: { label: string; value: string | HTMLElement }[] = [
         { label: t("Name"), value: title },
         { label: t("Province"), value: item.province || "—" },
@@ -102,7 +111,7 @@ export default function LocationMap({
       });
       return popup;
     },
-    [districtName, t],
+    [districtName, i18n.language, t],
   );
   useEffect(() => {
     if (!container.current) return;

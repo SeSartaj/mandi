@@ -101,6 +101,7 @@ def source_detail(actor, establishment_id, source, include_sensitive=None):
                 ("house_number", "House number"),
                 ("floor", "Floor"),
                 ("market", "Market"),
+                ("landmark", "Landmark"),
                 ("neighborhood", "Neighborhood"),
             ):
                 value = fields.get(label)

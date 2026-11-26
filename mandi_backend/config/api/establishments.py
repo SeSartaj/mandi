@@ -358,6 +358,7 @@ class NearbyEstablishments(APIView):
                     "house_number": licensing.get("house_number", ""),
                     "floor": licensing.get("floor", ""),
                     "market": licensing.get("market", ""),
+                    "landmark": licensing.get("landmark", ""),
                     "pharmacy_type": licensing.get("pharmacy_type", ""),
                     "latitude": lat,
                     "longitude": lon,

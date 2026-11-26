@@ -133,6 +133,7 @@ def candidate(category, record):
         "house_number": location_fields.get("House number") or "",
         "floor": location_fields.get("Floor") or "",
         "market": location_fields.get("Market") or "",
+        "landmark": location_fields.get("Landmark") or "",
         "neighborhood": location_fields.get("Neighborhood") or "",
         "license_number": record.get("aisa_license_number") or "",
         "license_issue_date": str(record.get("license_issue_date") or record.get("issue_date") or record.get("aisa_license_issue_date") or ""),

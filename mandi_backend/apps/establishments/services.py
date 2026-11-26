@@ -288,6 +288,7 @@ def _source_map_details(establishment, record):
         "house_number",
         "floor",
         "market",
+        "landmark",
         "neighborhood",
         "license_number",
         "license_issue_date",
